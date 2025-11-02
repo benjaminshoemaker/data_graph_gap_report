@@ -17,7 +17,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [x] Python 3.11 matrix on Linux/macOS
   - [x] Cache Poetry and pip
   - [x] Run unit + integration tests
-  - [ ] Upload coverage
+  - [x] Upload coverage
 - [ ] Makefile/justfile targets
   - [ ] `make test`, `make lint`, `make fmt`, `make e2e`
 
