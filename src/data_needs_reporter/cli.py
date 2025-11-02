@@ -35,21 +35,24 @@ from data_needs_reporter.utils.logging import init_logger, run_context
 app = typer.Typer(add_completion=False, help="Generate synthetic data needs reports.")
 
 
-def _version_callback(value: bool) -> bool:
-    if value:
-        typer.echo(__version__)
-        raise typer.Exit()
-    return value
+def _version_callback(ctx: typer.Context, value: Optional[bool]) -> Optional[bool]:
+    if not value or ctx.resilient_parsing:
+        return value
+    typer.echo(__version__)
+    raise typer.Exit()
 
 
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
-    version: bool = typer.Option(
-        False,
+    version: Optional[bool] = typer.Option(
+        None,
         "--version",
         "-V",
         callback=_version_callback,
+        expose_value=False,
+        is_flag=True,
+        flag_value=True,
         is_eager=True,
         help="Show the application version and exit.",
     ),
@@ -57,16 +60,19 @@ def main(
         None,
         "--config",
         help="Path to an alternate YAML configuration file.",
+        is_flag=False,
     ),
     api_cap_usd: Optional[float] = typer.Option(
         None,
         "--api-cap-usd",
         help="Override the LLM API spend cap in USD.",
+        is_flag=False,
     ),
     window: Optional[int] = typer.Option(
         None,
         "--window",
         help="Override report window size in days.",
+        is_flag=False,
     ),
     no_llm: bool = typer.Option(
         False,
@@ -74,8 +80,6 @@ def main(
         help="Disable LLM-powered classification for this run.",
     ),
 ) -> None:
-    _ = version  # version option handled via eager callback above
-
     override_path = config_path if config_path else None
     cli_overrides: dict[str, object] = {}
     if api_cap_usd is not None:
@@ -108,7 +112,9 @@ def main(
         ctx.call_on_close(_close)
 
     if ctx.invoked_subcommand is None:
-        typer.echo(ctx.get_help())
+        typer.echo(
+            "Usage: dnr [OPTIONS] COMMAND [ARGS]...\n\nUse 'dnr --help' for more information."
+        )
         raise typer.Exit()
 
 
@@ -178,11 +184,13 @@ def gen_warehouse_cmd(
         "--archetype",
         case_sensitive=False,
         help="Warehouse archetype to generate (neobank or marketplace).",
+        is_flag=False,
     ),
     out: Path = typer.Option(
         ...,
         "--out",
         help="Output directory for generated warehouse files.",
+        is_flag=False,
     ),
     dry_run: bool = typer.Option(
         False,
@@ -254,11 +262,13 @@ def gen_comms_cmd(
         "--archetype",
         case_sensitive=False,
         help="Archetype to generate communications for (neobank or marketplace).",
+        is_flag=False,
     ),
     out: Path = typer.Option(
         ...,
         "--out",
         help="Output directory for generated communications.",
+        is_flag=False,
     ),
 ) -> None:
     ctx_obj = ctx.obj or {}
@@ -329,9 +339,24 @@ def gen_comms_cmd(
 @app.command("run-report")
 def run_report_cmd(
     ctx: typer.Context,
-    warehouse: Path = typer.Option(..., "--warehouse", help="Path to warehouse data."),
-    comms: Path = typer.Option(..., "--comms", help="Path to communications data."),
-    out: Path = typer.Option(..., "--out", help="Output directory for reports."),
+    warehouse: Path = typer.Option(
+        ...,
+        "--warehouse",
+        help="Path to warehouse data.",
+        is_flag=False,
+    ),
+    comms: Path = typer.Option(
+        ...,
+        "--comms",
+        help="Path to communications data.",
+        is_flag=False,
+    ),
+    out: Path = typer.Option(
+        ...,
+        "--out",
+        help="Output directory for reports.",
+        is_flag=False,
+    ),
 ) -> None:
     ctx_obj = ctx.obj or {}
     logger = ctx_obj.get("logger")
@@ -508,9 +533,9 @@ def _run_checks(warehouse: Path, comms: Path, strict: bool) -> dict[str, object]
 @app.command("validate")
 def validate_cmd(
     ctx: typer.Context,
-    warehouse: Path = typer.Option(..., "--warehouse"),
-    comms: Path = typer.Option(..., "--comms"),
-    out: Path = typer.Option(..., "--out"),
+    warehouse: Path = typer.Option(..., "--warehouse", is_flag=False),
+    comms: Path = typer.Option(..., "--comms", is_flag=False),
+    out: Path = typer.Option(..., "--out", is_flag=False),
     strict: bool = typer.Option(False, "--strict"),
 ) -> None:
     ctx_obj = ctx.obj or {}
@@ -538,10 +563,10 @@ def validate_cmd(
 @app.command("eval-labels")
 def eval_labels_cmd(
     ctx: typer.Context,
-    preds: Path = typer.Option(..., "--pred"),
-    labels: Path = typer.Option(..., "--labels"),
-    out: Path = typer.Option(..., "--out"),
-    gate_f1: float = typer.Option(0.7, "--gate-f1"),
+    preds: Path = typer.Option(..., "--pred", is_flag=False),
+    labels: Path = typer.Option(..., "--labels", is_flag=False),
+    out: Path = typer.Option(..., "--out", is_flag=False),
+    gate_f1: float = typer.Option(0.7, "--gate-f1", is_flag=False),
 ) -> None:
     import random
 

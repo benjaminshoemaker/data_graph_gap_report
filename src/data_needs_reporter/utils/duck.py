@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Iterable, Optional
 
 import duckdb
 import polars as pl
+
+_IDENTIFIER_CLEAN_RE = re.compile(r"[^A-Za-z0-9_]")
 
 
 def open_db(db_path_or_none: Optional[Path]) -> duckdb.DuckDBPyConnection:
@@ -26,10 +29,10 @@ def attach_parquet_dir(
         raise FileNotFoundError(f"No parquet files found in {dir_path}")
 
     for file_path in parquet_files:
-        view_name = f"{name}_{file_path.stem}"
+        view_name = _make_identifier(f"{name}_{file_path.stem}")
+        file_literal = str(file_path).replace("'", "''")
         conn.execute(
-            f"CREATE VIEW IF NOT EXISTS {view_name} AS SELECT * FROM read_parquet(?)",
-            [str(file_path)],
+            f"CREATE VIEW IF NOT EXISTS {view_name} AS SELECT * FROM read_parquet('{file_literal}')"
         )
 
 
@@ -50,3 +53,12 @@ def _guard_sql(sql: str) -> None:
     forbidden = ("copy", "attach", "install")
     if any(keyword in lowered for keyword in forbidden):
         raise ValueError("Potentially unsafe SQL detected.")
+
+
+def _make_identifier(raw: str) -> str:
+    if not raw:
+        raise ValueError("Identifier cannot be empty.")
+    sanitized = _IDENTIFIER_CLEAN_RE.sub("_", raw)
+    if sanitized[0].isdigit():
+        sanitized = f"_{sanitized}"
+    return sanitized
