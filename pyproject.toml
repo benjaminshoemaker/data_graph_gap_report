@@ -20,6 +20,7 @@ click = ">=8.1,<8.2"
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.1.1"
 pre-commit = "^3.7.0"
+pytest-cov = "^4.1.0"
 
 [tool.poetry.scripts]
 dnr = "data_needs_reporter.cli:app"
@@ -27,3 +28,10 @@ dnr = "data_needs_reporter.cli:app"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+source = ["data_needs_reporter"]
+branch = true
+
+[tool.coverage.report]
+skip_empty = true
