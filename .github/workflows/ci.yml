@@ -12,21 +12,30 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         python-version: ["3.11"]
+    env:
+      POETRY_VIRTUALENVS_IN_PROJECT: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Cache Poetry virtualenv and pip wheels
+      - name: Cache Poetry virtualenv
+        id: poetry-cache
         uses: actions/cache@v4
         with:
           path: |
             .venv
             ~/.cache/pypoetry
-            ~/.cache/pip
-          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
           restore-keys: |
             poetry-${{ runner.os }}-
+      - name: Cache pip wheels
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
       - name: Install pre-commit and poetry
         run: |
           python -m pip install --upgrade pip
