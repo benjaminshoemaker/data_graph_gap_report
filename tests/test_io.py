@@ -4,8 +4,6 @@ from pathlib import Path
 
 import pytest
 
-pl = pytest.importorskip("polars")
-
 from data_needs_reporter.utils.io import (
     read_json,
     read_parquet,
@@ -13,6 +11,8 @@ from data_needs_reporter.utils.io import (
     write_json_atomic,
     write_parquet_atomic,
 )
+
+pl = pytest.importorskip("polars")
 
 
 def test_write_json_atomic_creates_directories_and_round_trips(tmp_path: Path) -> None:

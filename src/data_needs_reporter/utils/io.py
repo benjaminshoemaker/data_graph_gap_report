@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Union
 
 try:  # pragma: no cover - optional dependency handling
     import polars as _pl
@@ -13,6 +13,7 @@ except ImportError:  # pragma: no cover
 
 if TYPE_CHECKING:  # pragma: no cover
     import polars as pl  # noqa: F401
+
     PolarsDataFrame = pl.DataFrame
 else:
     PolarsDataFrame = Any

@@ -4,7 +4,6 @@ from typer.testing import CliRunner
 
 from data_needs_reporter.cli import app
 
-
 runner = CliRunner()
 
 

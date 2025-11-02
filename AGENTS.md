@@ -1,31 +1,31 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- CLI source lives in `src/data_needs_reporter/` with subpackages for config, utilities, generators, reporting, and evaluation.
-- Synthetic assets persist under `data/`, `comms/`, and `reports/`; config defaults stay in `configs/default.yaml`.
-- Tests mirror the runtime layout in `tests/` (e.g., `tests/test_generators.py`, `tests/test_cli.py`) and should track new modules 1:1.
+- Runtime code lives under `src/data_needs_reporter/`; subpackages map directly to the spec: `config/` for Pydantic models, `generate/` for warehouse+comms synth, `report/` for metrics, scoring, LLM flows, `utils/` for I/O, DuckDB, logging, and cost guards.
+- Default configuration sits in `configs/default.yaml`; generated artifacts land in `data/`, `comms/`, `reports/`, and cached LLM responses live under `.cache/llm/`.
+- Keep tests mirrored to modules (`tests/test_generators.py`, `tests/test_cli.py`, `tests/test_end_to_end.py`) so every new feature ships with coverage in the matching suite.
 
 ## Build, Test, and Development Commands
-- `poetry install` sets up the Python 3.11 environment with Typer, DuckDB, Polars, and test tooling.
-- `poetry run dnr quickstart --no-llm` generates a fast, deterministic smoke run without LLM calls.
-- `poetry run dnr gen-warehouse --archetype neobank --out data/neobank` and `poetry run dnr gen-comms --archetype neobank --out comms/neobank` materialize archetype data for manual inspection.
-- `poetry run pytest` runs the full test suite; add `-k name` or `-m marker` for focused runs.
+- Install the toolchain with `poetry install`; use `poetry run dnr --help` to confirm Typer wiring.
+- Fast smoke runs: `poetry run dnr quickstart --no-llm --fast`; targeted flows: `poetry run dnr gen-warehouse --archetype neobank --dry-run` and `poetry run dnr gen-comms --archetype neobank --out comms/neobank`.
+- Run quality gates locally via `pre-commit run --all-files` and the full suite with `poetry run pytest`; execute long-path checks using `poetry run pytest tests/test_end_to_end.py`.
 
 ## Coding Style & Naming Conventions
-- Follow PEP 8 with 4-space indentation, snake_case for functions and modules, PascalCase for classes, and UPPER_SNAKE for constants.
-- Prefer type hints and dataclasses/Pydantic models for structured data.
-- Keep CLI command names short (`dnr run-report`), and align module names with their domain (`generate/warehouse.py`, `report/metrics.py`).
+- Follow Black-formatted, 4-space indentation and snake_case functions/modules; Pydantic models stay PascalCase and constants use UPPER_SNAKE.
+- Pre-commit enforces `black`, `ruff`, and `isort`; install hooks once with `pre-commit install`.
+- Thread seeds from config helpers (e.g., `config.warehouse.seed`) into RNG utilities to keep outputs reproducible per spec.
 
 ## Testing Guidelines
-- Tests use `pytest`; name files `test_*.py` and functions `test_*` describing behavior (e.g., `test_budget_respects_cap`).
-- Add fixtures for synthetic data in `tests/conftest.py` when shared setup is needed.
-- Aim to cover defect injection, metrics accuracy, and CLI flows (`quickstart --no-llm`) before merging.
+- Use `pytest` naming (`test_*`) with behavior-focused assertions; stash shared fixtures in `tests/conftest.py` and gate optional deps with `pytest.importorskip("polars")`.
+- When adjusting generators or defect injectors, extend `tests/test_generators.py` and `tests/test_metrics.py`; CLI flows belong in `tests/test_cli.py` or `tests/test_end_to_end.py`.
+- Record example command output paths (such as `reports/neobank/exec_summary.json`) when debugging failures.
 
 ## Commit & Pull Request Guidelines
-- Write imperative commit messages summarizing intent (e.g., `Add sampling guard for LLM budget`).
-- Squash fixup noise before review; keep commits scoped to a single concern.
-- Pull requests should include a concise summary, testing notes (`poetry run pytest`), and any configuration/environment caveats (e.g., required `OPENAI_API_KEY`).
-- Link to relevant issues or todo items when applicable, and attach sample output paths (such as `reports/neobank/data_health.json`) to contextualize changes.
+- Prefer single-purpose, imperative commits (e.g., `Add sample-to-fit allocator guard`) and run `pre-commit run --all-files && poetry run pytest` before pushing.
+- PRs should outline affected CLI commands, config knobs, and include testing notes; link any spec paragraphs or `todo.md` items that motivated the change.
 
 ## Progress Tracking
-- After completing any code change, review `todo.md` and mark tasks that are now done so the team can track session-to-session progress.
+- After writing any code, open `todo.md`, check off all completed items, and call out remaining follow-ups so progress stays traceable between sessions.
+
+## Configuration & Secrets
+- Load overrides via `--config`, env vars, or flags in that precedence; keep credentials in `.env` (see `.env.example`) and export `OPENAI_API_KEY` only when running LLM-enabled commands.

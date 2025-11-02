@@ -29,7 +29,9 @@ class CostGuard:
         self._cap_with_margin = self.cap_usd * (1 - self.safety_margin)
 
     def can_consume(self, tokens: int) -> bool:
-        return (self.tokens_used + tokens) * self._price_per_token <= self._cap_with_margin + 1e-12
+        return (
+            self.tokens_used + tokens
+        ) * self._price_per_token <= self._cap_with_margin + 1e-12
 
     def try_consume(self, tokens: int, channel: Optional[str] = None) -> bool:
         if not self.can_consume(tokens):
@@ -37,7 +39,9 @@ class CostGuard:
             return False
         self.tokens_used += tokens
         if channel:
-            usage = self._channel_usage.setdefault(channel, {"tokens": 0, "messages": 0})
+            usage = self._channel_usage.setdefault(
+                channel, {"tokens": 0, "messages": 0}
+            )
             usage["tokens"] += tokens
             usage["messages"] += 1
         return True
@@ -51,7 +55,11 @@ class CostGuard:
 
     @property
     def token_budget(self) -> int:
-        return int(self._cap_with_margin / self._price_per_token) if self._price_per_token else 0
+        return (
+            int(self._cap_with_margin / self._price_per_token)
+            if self._price_per_token
+            else 0
+        )
 
     def budget_snapshot(self, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         data: Dict[str, Any] = {

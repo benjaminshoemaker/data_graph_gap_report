@@ -6,6 +6,7 @@ from data_needs_reporter.cli import app
 
 runner = CliRunner()
 
+
 def test_quickstart_performance():
     with runner.isolated_filesystem():
         start = time.time()

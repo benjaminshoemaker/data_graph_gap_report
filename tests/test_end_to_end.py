@@ -13,7 +13,12 @@ runner = CliRunner()
 
 def _write_config(path: Path) -> None:
     config = {
-        "paths": {"data": "data", "comms": "comms", "reports": "reports", "meta": "meta"},
+        "paths": {
+            "data": "data",
+            "comms": "comms",
+            "reports": "reports",
+            "meta": "meta",
+        },
         "warehouse": {
             "archetypes": ["neobank", "marketplace"],
             "scale": "evaluation",
@@ -59,7 +64,11 @@ def _write_config(path: Path) -> None:
             "demand_weight_caps": {"min": 0.15, "max": 0.60},
             "revenue_norm": "median_3m",
         },
-        "budget": {"mode": "sample_to_fit", "safety_margin": 0.25, "coverage_floor_pct": 20},
+        "budget": {
+            "mode": "sample_to_fit",
+            "safety_margin": 0.25,
+            "coverage_floor_pct": 20,
+        },
         "cache": {"enabled": True, "dir": ".cache/llm"},
     }
     path.write_text(json.dumps(config, indent=2), encoding="utf-8")
@@ -77,26 +86,39 @@ def test_end_to_end_pipeline(tmp_path: Path) -> None:
             assert result.exit_code == 0, result.stdout
 
         invoke(["init"])
-        invoke(["gen-warehouse", "--archetype", "neobank", "--out", "data/neobank", "--dry-run"])
+        invoke(
+            [
+                "gen-warehouse",
+                "--archetype",
+                "neobank",
+                "--out",
+                "data/neobank",
+                "--dry-run",
+            ]
+        )
         invoke(["gen-comms", "--archetype", "neobank", "--out", "comms/neobank"])
-        invoke([
-            "run-report",
-            "--warehouse",
-            "data/neobank",
-            "--comms",
-            "comms/neobank",
-            "--out",
-            "reports/neobank",
-        ])
-        invoke([
-            "validate",
-            "--warehouse",
-            "data/neobank",
-            "--comms",
-            "comms/neobank",
-            "--out",
-            "reports/neobank/qc",
-            "--strict",
-        ])
+        invoke(
+            [
+                "run-report",
+                "--warehouse",
+                "data/neobank",
+                "--comms",
+                "comms/neobank",
+                "--out",
+                "reports/neobank",
+            ]
+        )
+        invoke(
+            [
+                "validate",
+                "--warehouse",
+                "data/neobank",
+                "--comms",
+                "comms/neobank",
+                "--out",
+                "reports/neobank/qc",
+                "--strict",
+            ]
+        )
 
         assert (Path("reports") / "neobank" / "exec_summary.json").exists()

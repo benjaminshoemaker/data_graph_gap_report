@@ -54,3 +54,17 @@ Paths in the config are relative to the working directory by default (`data/`, `
 - **Polars missing**: install optional dependency `polars` (`poetry add polars`) to enable Parquet generation.
 - **Quickstart fails on LLM**: rerun with `--no-llm` to create report scaffolds without classification.
 - **Validation fails under `--strict`**: inspect `qc_summary.json` and `qc_checks.csv` under the provided output directory for failing gates.
+
+## Development setup
+
+Install the git hooks once:
+
+```bash
+pre-commit install
+```
+
+Run the linters/formatters manually:
+
+```bash
+pre-commit run --all-files
+```

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 
 try:  # pragma: no cover - optional dependency
     import polars as pl
@@ -72,7 +71,8 @@ def p95_ingest_lag_min(
     lag_series = (
         df.with_columns(
             (
-                (polars.col(loaded_col) - polars.col(event_col)).dt.total_seconds() / 60.0
+                (polars.col(loaded_col) - polars.col(event_col)).dt.total_seconds()
+                / 60.0
             ).alias("_lag_min")
         )
         .select(polars.col("_lag_min"))
@@ -123,13 +123,19 @@ def detect_null_spikes(
     return spikes
 
 
-def evaluate_slos(metrics: Mapping[str, float], slos: Mapping[str, float]) -> Dict[str, bool]:
+def evaluate_slos(
+    metrics: Mapping[str, float], slos: Mapping[str, float]
+) -> Dict[str, bool]:
     results: Dict[str, bool] = {}
     for metric, threshold in slos.items():
         value = metrics.get(metric)
         if value is None:
             continue
-        if metric == "fk_orphan_pct" or metric == "dup_keys_pct" or metric == "key_null_pct":
+        if (
+            metric == "fk_orphan_pct"
+            or metric == "dup_keys_pct"
+            or metric == "key_null_pct"
+        ):
             results[metric] = value <= threshold
         elif metric == "p95_ingest_lag_min":
             results[metric] = value <= threshold
@@ -154,14 +160,12 @@ def compute_table_metrics(
     df: "pl.DataFrame",
     config: TableMetricConfig,
 ) -> Dict[str, object]:
-    polars = _require_polars()
+    _require_polars()
     metrics: Dict[str, object] = {}
     metrics["key_null_pct"] = key_null_pct(df, config.required_columns)
     metrics["dup_keys_pct"] = dup_key_pct(df, config.duplicate_keys)
     if config.fk_column and config.fk_dimension_ids is not None:
-        metrics.update(
-            fk_metrics(df, config.fk_column, config.fk_dimension_ids)
-        )
+        metrics.update(fk_metrics(df, config.fk_column, config.fk_dimension_ids))
     else:
         metrics["fk_success_pct"] = 100.0
         metrics["fk_orphan_pct"] = 0.0

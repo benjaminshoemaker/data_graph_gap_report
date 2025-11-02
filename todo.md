@@ -12,11 +12,11 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [x] `tests/` scaffold with pytest.ini
   - [x] `.gitignore`, `.env.example`, `README.md`
 - [x] Configure console script `dnr`
-- [ ] Add pre-commit hooks (black, isort, ruff)
+- [x] Add pre-commit hooks (black, isort, ruff)
 - [ ] CI: GitHub Actions
-  - [ ] Python 3.11 matrix on Linux/macOS
-  - [ ] Cache Poetry and pip
-  - [ ] Run unit + integration tests
+  - [x] Python 3.11 matrix on Linux/macOS
+  - [x] Cache Poetry and pip
+  - [x] Run unit + integration tests
   - [ ] Upload coverage
 - [ ] Makefile/justfile targets
   - [ ] `make test`, `make lint`, `make fmt`, `make e2e`
@@ -310,8 +310,8 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 19. Final E2E
 
-- [ ] End‑to‑end smoke test
-  - [ ] init → gen‑warehouse(neobank) → gen‑comms(neobank with mock LLM) → run‑report → validate --strict
+- [x] End‑to‑end smoke test
+  - [x] init → gen‑warehouse(neobank) → gen‑comms(neobank with mock LLM) → run‑report → validate --strict
 - [ ] Golden snapshots for `data_health.json`, `themes.json` structure, and figure hashes
 - [ ] Tag `v0.1.0`
 

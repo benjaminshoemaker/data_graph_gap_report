@@ -23,7 +23,9 @@ def test_env_override_wins_over_yaml() -> None:
 def test_cli_override_beats_env() -> None:
     env = {"LLM_API_CAP_USD": "0.8"}
     cli_overrides = {"classification.api_cap_usd": 0.5}
-    config = load_config(DEFAULT_CONFIG_PATH, None, env=env, cli_overrides=cli_overrides)
+    config = load_config(
+        DEFAULT_CONFIG_PATH, None, env=env, cli_overrides=cli_overrides
+    )
 
     assert config.classification.api_cap_usd == 0.5
 

@@ -1,14 +1,12 @@
+import json
 import os
 import subprocess
 import sys
-import json
 from pathlib import Path
 
-import typer
 from typer.testing import CliRunner
 
 from data_needs_reporter.cli import app
-
 
 runner = CliRunner()
 
@@ -178,5 +176,10 @@ def test_quickstart_no_llm_outputs_minimal(tmp_path: Path) -> None:
 def test_console_entrypoint_version(tmp_path: Path) -> None:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(Path.cwd() / "src")
-    proc = subprocess.run([sys.executable, "-m", "data_needs_reporter.cli", "--version"], capture_output=True, text=True, env=env)
+    proc = subprocess.run(
+        [sys.executable, "-m", "data_needs_reporter.cli", "--version"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
     assert proc.returncode == 0

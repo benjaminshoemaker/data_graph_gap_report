@@ -21,7 +21,6 @@ from data_needs_reporter.generate.warehouse import (
     write_empty_warehouse,
 )
 from data_needs_reporter.report.llm import MockProvider, RepairingLLMClient
-from data_needs_reporter.report.metrics import evaluate_slos
 from data_needs_reporter.report.plots import (
     plot_dup_key_pct_bar,
     plot_key_null_pct_daily,
@@ -32,7 +31,6 @@ from data_needs_reporter.report.plots import (
 from data_needs_reporter.report.scoring import compute_confidence, compute_score
 from data_needs_reporter.utils.cost_guard import CostGuard
 from data_needs_reporter.utils.logging import init_logger, run_context
-
 
 app = typer.Typer(add_completion=False, help="Generate synthetic data needs reports.")
 
@@ -370,7 +368,9 @@ def run_report_cmd(
         },
     ]
 
-    (out_dir / "data_health.json").write_text(json.dumps({"tables": data_health}, indent=2), encoding="utf-8")
+    (out_dir / "data_health.json").write_text(
+        json.dumps({"tables": data_health}, indent=2), encoding="utf-8"
+    )
 
     csv_path = out_dir / "data_health.csv"
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
@@ -401,7 +401,9 @@ def run_report_cmd(
 
     themes = [theme for theme in themes if theme["confidence"] >= 0.55]
 
-    (out_dir / "themes.json").write_text(json.dumps({"themes": themes}, indent=2), encoding="utf-8")
+    (out_dir / "themes.json").write_text(
+        json.dumps({"themes": themes}, indent=2), encoding="utf-8"
+    )
 
     themes_md_lines = ["# Top Themes\n"]
     for theme in themes:
@@ -416,7 +418,9 @@ def run_report_cmd(
         "top_actions": themes[:3],
         "notes": "Synthetic summary generated for evaluation.",
     }
-    (out_dir / "exec_summary.json").write_text(json.dumps(exec_summary, indent=2), encoding="utf-8")
+    (out_dir / "exec_summary.json").write_text(
+        json.dumps(exec_summary, indent=2), encoding="utf-8"
+    )
 
     exec_md = ["# Executive Summary", f"Generated: {now}"]
     for idx, theme in enumerate(themes[:3], 1):
@@ -440,9 +444,24 @@ def run_report_cmd(
     ]
     dup_by_table = {row["table"]: row["dup_keys_pct"] for row in data_health}
     monthly_theme = [
-        {"month": "2023-11", "data_quality": 0.4, "pipeline_health": 0.35, "governance": 0.25},
-        {"month": "2023-12", "data_quality": 0.45, "pipeline_health": 0.32, "governance": 0.23},
-        {"month": "2024-01", "data_quality": 0.5, "pipeline_health": 0.3, "governance": 0.2},
+        {
+            "month": "2023-11",
+            "data_quality": 0.4,
+            "pipeline_health": 0.35,
+            "governance": 0.25,
+        },
+        {
+            "month": "2023-12",
+            "data_quality": 0.45,
+            "pipeline_health": 0.32,
+            "governance": 0.23,
+        },
+        {
+            "month": "2024-01",
+            "data_quality": 0.5,
+            "pipeline_health": 0.3,
+            "governance": 0.2,
+        },
     ]
 
     plot_lag_p95_daily(lag_daily, figures_dir / "lag_p95_daily.png")
@@ -464,14 +483,18 @@ def run_report_cmd(
         logger.info("run-report completed for %s", out_dir)
 
 
-def _run_checks(warehouse: Path, comms: Path, strict: bool) -> Dict[str, object]:
+def _run_checks(warehouse: Path, comms: Path, strict: bool) -> dict[str, object]:
     fail_marker = (warehouse / "FAIL").exists() or (comms / "FAIL").exists()
     checks = [
         {"name": "schema", "passed": True, "detail": "Schema valid."},
         {
             "name": "volume",
             "passed": not fail_marker,
-            "detail": "Volume deviation exceeded." if fail_marker else "Volume within tolerance.",
+            "detail": (
+                "Volume deviation exceeded."
+                if fail_marker
+                else "Volume within tolerance."
+            ),
         },
     ]
     overall_pass = all(check["passed"] for check in checks)
@@ -529,9 +552,14 @@ def eval_labels_cmd(
 
     random.seed(42)
     classes = ["data_quality", "pipeline_health", "governance"]
-    per_class = {cls: {"precision": 0.8, "recall": 0.75, "f1": 0.77, "support": 10} for cls in classes}
+    per_class = {
+        cls: {"precision": 0.8, "recall": 0.75, "f1": 0.77, "support": 10}
+        for cls in classes
+    }
     macro_f1 = sum(metric["f1"] for metric in per_class.values()) / len(per_class)
-    confusion = {cls: {other: random.randint(0, 2) for other in classes} for cls in classes}
+    confusion = {
+        cls: {other: random.randint(0, 2) for other in classes} for cls in classes
+    }
     summary = {
         "macro_f1": macro_f1,
         "per_class": per_class,
@@ -539,7 +567,9 @@ def eval_labels_cmd(
         "gates_pass": macro_f1 >= gate_f1,
     }
 
-    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (out_dir / "summary.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
 
     rows = []
     for cls, metrics in per_class.items():
@@ -584,7 +614,9 @@ def quickstart_cmd(
         try:
             write_empty_warehouse(archetype, warehouse_dir)
         except RuntimeError:
-            (warehouse_dir / "placeholder.txt").write_text("warehouse stub", encoding="utf-8")
+            (warehouse_dir / "placeholder.txt").write_text(
+                "warehouse stub", encoding="utf-8"
+            )
 
         comms_dir = Path(config.paths.comms) / archetype
         comms_dir.mkdir(parents=True, exist_ok=True)
@@ -593,15 +625,21 @@ def quickstart_cmd(
         report_dir.mkdir(parents=True, exist_ok=True)
 
         if no_llm:
-            (report_dir / "data_health.json").write_text(json.dumps({"tables": []}, indent=2), encoding="utf-8")
-            (report_dir / "themes.json").write_text(json.dumps({"themes": []}, indent=2), encoding="utf-8")
+            (report_dir / "data_health.json").write_text(
+                json.dumps({"tables": []}, indent=2), encoding="utf-8"
+            )
+            (report_dir / "themes.json").write_text(
+                json.dumps({"themes": []}, indent=2), encoding="utf-8"
+            )
             themes_md = """# Themes
 
 Themes skipped (no LLM mode).
 """
             (report_dir / "themes.md").write_text(themes_md, encoding="utf-8")
         else:
-            run_report_cmd(ctx, warehouse=warehouse_dir, comms=comms_dir, out=report_dir)
+            run_report_cmd(
+                ctx, warehouse=warehouse_dir, comms=comms_dir, out=report_dir
+            )
 
     index_lines = ["# Reports Index", ""]
     for archetype in archetypes:

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tuple
+from typing import Dict, List, Mapping, MutableMapping, Sequence, Tuple
 
 BUCKET_WEIGHTS: Mapping[str, float] = {
     "data_quality": 0.18,

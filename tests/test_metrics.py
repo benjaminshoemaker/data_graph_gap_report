@@ -2,13 +2,6 @@ import math
 
 import pytest
 
-from data_needs_reporter.report.metrics import (
-    compute_table_metrics,
-    detect_null_spikes,
-    evaluate_slos,
-    key_null_pct,
-    dup_key_pct,
-)
 from data_needs_reporter.report.scoring import (
     compute_confidence,
     compute_score,
@@ -19,9 +12,6 @@ from data_needs_reporter.report.scoring import (
     select_top_actions,
 )
 
-pl = pytest.importorskip('polars')
-
-
 
 def test_normalize_revenue():
     values = [1000, 1100, 900, 950]
@@ -31,8 +21,8 @@ def test_normalize_revenue():
 
 
 def test_reweight_source_weights():
-    base = {'nlq': 0.5, 'slack': 0.3, 'email': 0.2}
-    volumes = {'nlq': 50, 'slack': 30, 'email': 20}
+    base = {"nlq": 0.5, "slack": 0.3, "email": 0.2}
+    volumes = {"nlq": 50, "slack": 30, "email": 20}
     weights = reweight_source_weights(base, volumes, base)
     assert abs(sum(weights.values()) - 1.0) < 1e-6
     for w in weights.values():
@@ -40,8 +30,8 @@ def test_reweight_source_weights():
 
 
 def test_compute_severity():
-    over = {'key_null_pct': 0.03, 'fk_orphan_pct': 0.07}
-    slos = {'key_null_pct': 0.02, 'fk_orphan_pct': 0.05}
+    over = {"key_null_pct": 0.03, "fk_orphan_pct": 0.07}
+    slos = {"key_null_pct": 0.02, "fk_orphan_pct": 0.05}
     severity = compute_severity(over, slos)
     assert severity > 0.0
 
@@ -58,13 +48,13 @@ def test_compute_score():
 
 def test_select_top_actions_diversity():
     items = [
-        {'theme': 'retention', 'score': 0.9, 'confidence': 0.8},
-        {'theme': 'retention', 'score': 0.85, 'confidence': 0.9},
-        {'theme': 'growth', 'score': 0.8, 'confidence': 0.8},
-        {'theme': 'quality', 'score': 0.75, 'confidence': 0.7},
+        {"theme": "retention", "score": 0.9, "confidence": 0.8},
+        {"theme": "retention", "score": 0.85, "confidence": 0.9},
+        {"theme": "growth", "score": 0.8, "confidence": 0.8},
+        {"theme": "quality", "score": 0.75, "confidence": 0.7},
     ]
     selected = select_top_actions(items)
-    themes = {item['theme'] for item in selected}
+    themes = {item["theme"] for item in selected}
     assert len(selected) == 3
     assert len(themes) >= 2
 

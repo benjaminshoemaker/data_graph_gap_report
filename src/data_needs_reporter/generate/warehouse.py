@@ -178,7 +178,9 @@ def write_empty_warehouse(archetype: str, out_dir: Path) -> None:
         write_parquet_atomic(out_path / f"{table_name}.parquet", df)
 
 
-def generate_neobank_dims(cfg: AppConfig, out_dir: Path, seed: int | None) -> Dict[str, int]:
+def generate_neobank_dims(
+    cfg: AppConfig, out_dir: Path, seed: int | None
+) -> Dict[str, int]:
     polars = _ensure_polars()
     rng = random.Random(seed if seed is not None else cfg.warehouse.seed)
 
@@ -309,10 +311,16 @@ def generate_neobank_dims(cfg: AppConfig, out_dir: Path, seed: int | None) -> Di
     out_path.mkdir(parents=True, exist_ok=True)
 
     counts = {
-        "dim_customer": _write_table("neobank", "dim_customer", customers, out_path, polars),
-        "dim_account": _write_table("neobank", "dim_account", accounts, out_path, polars),
+        "dim_customer": _write_table(
+            "neobank", "dim_customer", customers, out_path, polars
+        ),
+        "dim_account": _write_table(
+            "neobank", "dim_account", accounts, out_path, polars
+        ),
         "dim_card": _write_table("neobank", "dim_card", cards, out_path, polars),
-        "dim_merchant": _write_table("neobank", "dim_merchant", merchants, out_path, polars),
+        "dim_merchant": _write_table(
+            "neobank", "dim_merchant", merchants, out_path, polars
+        ),
         "dim_plan": _write_table("neobank", "dim_plan", plans, out_path, polars),
     }
     return counts
@@ -336,9 +344,6 @@ def generate_neobank_facts(
 
     account_type_lookup = {
         int(row["account_id"]): row["type"] for row in accounts_df.to_dicts()
-    }
-    account_customer_lookup = {
-        int(row["account_id"]): row["customer_id"] for row in accounts_df.to_dicts()
     }
     cards = [dict(row) for row in cards_df.to_dicts() if row["status"] == "active"]
     merchants = [dict(row) for row in merchants_df.to_dicts()]
@@ -420,8 +425,10 @@ def generate_neobank_facts(
                     ["card_present", "card_not_present", "digital_wallet"],
                     weights=[0.55, 0.25, 0.20],
                 )[0]
-                auth_result = "captured" if rng.random() < 0.965 else rng.choice(
-                    ["declined", "reversed"]
+                auth_result = (
+                    "captured"
+                    if rng.random() < 0.965
+                    else rng.choice(["declined", "reversed"])
                 )
 
                 transactions.append(
@@ -451,9 +458,7 @@ def generate_neobank_facts(
         if rng.random() >= subscriber_rate:
             continue
 
-        start_month_index = max(
-            0, (customer_created - base_start).days // 30
-        )
+        start_month_index = max(0, (customer_created - base_start).days // 30)
         current_period_start = base_start + timedelta(days=start_month_index * 30)
         active = True
 
@@ -494,7 +499,9 @@ def generate_neobank_facts(
     }
 
 
-def generate_marketplace_dims(cfg: AppConfig, out_dir: Path, seed: int | None = None) -> Dict[str, int]:
+def generate_marketplace_dims(
+    cfg: AppConfig, out_dir: Path, seed: int | None = None
+) -> Dict[str, int]:
     polars = _ensure_polars()
     rng = random.Random(seed if seed is not None else cfg.warehouse.seed + 101)
 
@@ -514,7 +521,9 @@ def generate_marketplace_dims(cfg: AppConfig, out_dir: Path, seed: int | None = 
 
     buyers = []
     for bid in range(1, buyer_count + 1):
-        created_at = base_start + timedelta(days=rng.randrange(total_days), minutes=rng.randrange(24 * 60))
+        created_at = base_start + timedelta(
+            days=rng.randrange(total_days), minutes=rng.randrange(24 * 60)
+        )
         country = rng.choices(
             ["US", "CA", "GB", "AU", "DE", "FR", "ES", "MX"],
             weights=[0.55, 0.08, 0.07, 0.05, 0.08, 0.06, 0.05, 0.06],
@@ -525,7 +534,9 @@ def generate_marketplace_dims(cfg: AppConfig, out_dir: Path, seed: int | None = 
     seller_statuses = ["active", "paused", "suspended"]
     status_weights = [0.82, 0.12, 0.06]
     for sid in range(1, seller_count + 1):
-        created_at = base_start + timedelta(days=rng.randrange(total_days), minutes=rng.randrange(24 * 60))
+        created_at = base_start + timedelta(
+            days=rng.randrange(total_days), minutes=rng.randrange(24 * 60)
+        )
         country = rng.choices(
             ["US", "CA", "UK", "DE", "FR", "NL", "IT", "JP"],
             weights=[0.58, 0.1, 0.08, 0.07, 0.06, 0.04, 0.04, 0.03],
@@ -554,7 +565,9 @@ def generate_marketplace_dims(cfg: AppConfig, out_dir: Path, seed: int | None = 
     top_level_ids = []
     for idx in range(10):
         top_id = category_id
-        categories.append({"category_id": top_id, "name": f"Category {idx + 1}", "parent_id": None})
+        categories.append(
+            {"category_id": top_id, "name": f"Category {idx + 1}", "parent_id": None}
+        )
         top_level_ids.append(top_id)
         category_id += 1
         for sub_name in subcategory_names:
@@ -571,7 +584,6 @@ def generate_marketplace_dims(cfg: AppConfig, out_dir: Path, seed: int | None = 
     category_weights = _zipf_weights(len(category_ids), 1.1)
 
     seller_ids = [s["seller_id"] for s in sellers]
-    seller_weights = _zipf_weights(len(seller_ids), 1.05)
 
     listings = []
     listing_id = 1
@@ -582,7 +594,9 @@ def generate_marketplace_dims(cfg: AppConfig, out_dir: Path, seed: int | None = 
             created_at = base_start + timedelta(
                 days=rng.randrange(total_days), minutes=rng.randrange(24 * 60)
             )
-            status = rng.choices(["active", "inactive", "draft"], weights=[0.78, 0.12, 0.10])[0]
+            status = rng.choices(
+                ["active", "inactive", "draft"], weights=[0.78, 0.12, 0.10]
+            )[0]
             price_cents = int(max(500, rng.lognormvariate(4.2, 0.7) * 100))
             listings.append(
                 {
@@ -621,9 +635,15 @@ def generate_marketplace_dims(cfg: AppConfig, out_dir: Path, seed: int | None = 
 
     counts = {
         "dim_buyer": _write_table("marketplace", "dim_buyer", buyers, out_path, polars),
-        "dim_seller": _write_table("marketplace", "dim_seller", sellers, out_path, polars),
-        "dim_category": _write_table("marketplace", "dim_category", categories, out_path, polars),
-        "dim_listing": _write_table("marketplace", "dim_listing", listings, out_path, polars),
+        "dim_seller": _write_table(
+            "marketplace", "dim_seller", sellers, out_path, polars
+        ),
+        "dim_category": _write_table(
+            "marketplace", "dim_category", categories, out_path, polars
+        ),
+        "dim_listing": _write_table(
+            "marketplace", "dim_listing", listings, out_path, polars
+        ),
     }
     return counts
 
@@ -649,7 +669,11 @@ def generate_marketplace_facts(
     for row in listings_df.to_dicts():
         listings_by_seller.setdefault(int(row["seller_id"]), []).append(dict(row))
 
-    seller_ids = [int(s["seller_id"]) for s in sellers if listings_by_seller.get(int(s["seller_id"]))]
+    seller_ids = [
+        int(s["seller_id"])
+        for s in sellers
+        if listings_by_seller.get(int(s["seller_id"]))
+    ]
     seller_weights = _zipf_weights(len(seller_ids), 1.05) if seller_ids else []
     if not seller_ids:
         raise ValueError("Listings are required to generate marketplace facts.")
@@ -732,7 +756,9 @@ def generate_marketplace_facts(
             )
             order_items.extend(line_items)
 
-            captured_at = min(order_time + timedelta(minutes=rng.randint(30, 12 * 60)), end_time)
+            captured_at = min(
+                order_time + timedelta(minutes=rng.randint(30, 12 * 60)), end_time
+            )
             payments.append(
                 {
                     "order_id": order_id,
@@ -759,11 +785,15 @@ def generate_marketplace_facts(
     out_path.mkdir(parents=True, exist_ok=True)
 
     counts = {
-        "fact_order": _write_table("marketplace", "fact_order", orders, out_path, polars),
+        "fact_order": _write_table(
+            "marketplace", "fact_order", orders, out_path, polars
+        ),
         "fact_order_item": _write_table(
             "marketplace", "fact_order_item", order_items, out_path, polars
         ),
-        "fact_payment": _write_table("marketplace", "fact_payment", payments, out_path, polars),
+        "fact_payment": _write_table(
+            "marketplace", "fact_payment", payments, out_path, polars
+        ),
         "snapshot_listing_daily": _write_table(
             "marketplace", "snapshot_listing_daily", snapshots, out_path, polars
         ),

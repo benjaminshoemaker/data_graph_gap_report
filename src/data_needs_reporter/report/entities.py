@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Mapping, Optional, Sequence
+from typing import List, Mapping, Optional, Sequence
 
 from data_needs_reporter.report.llm import LLMClient, LLMError
 
