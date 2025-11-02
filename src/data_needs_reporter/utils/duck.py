@@ -14,7 +14,9 @@ def open_db(db_path_or_none: Optional[Path]) -> duckdb.DuckDBPyConnection:
     return duckdb.connect(database=str(db_path_or_none))
 
 
-def attach_parquet_dir(conn: duckdb.DuckDBPyConnection, name: str, dir_path: Path) -> None:
+def attach_parquet_dir(
+    conn: duckdb.DuckDBPyConnection, name: str, dir_path: Path
+) -> None:
     directory = Path(dir_path)
     if not directory.exists():
         raise FileNotFoundError(f"Parquet directory not found: {dir_path}")

@@ -16,7 +16,9 @@ class LLMError(RuntimeError):
 class LLMProvider:
     """Abstract provider interface."""
 
-    def json_complete(self, payload: Dict[str, Any]) -> Dict[str, Any]:  # pragma: no cover - interface
+    def json_complete(
+        self, payload: Dict[str, Any]
+    ) -> Dict[str, Any]:  # pragma: no cover - interface
         raise NotImplementedError
 
 
@@ -119,7 +121,11 @@ class RepairingLLMClient(LLMClient):
             try:
                 payload = {
                     "model": self.model,
-                    "prompt": prompt if attempts == 1 else f"{prompt}\nRespond with STRICT JSON.",
+                    "prompt": (
+                        prompt
+                        if attempts == 1
+                        else f"{prompt}\nRespond with STRICT JSON."
+                    ),
                     "temperature": temperature,
                     "max_output_tokens": self.max_output_tokens,
                     "response_format": "json",
@@ -129,7 +135,9 @@ class RepairingLLMClient(LLMClient):
                 if time.time() - start > self.timeout_s:
                     raise LLMError("LLM request exceeded timeout")
                 parsed = self._validate_json(result)
-                cache_path.write_text(json.dumps(parsed, sort_keys=True), encoding="utf-8")
+                cache_path.write_text(
+                    json.dumps(parsed, sort_keys=True), encoding="utf-8"
+                )
                 return parsed
             except Exception as exc:  # pragma: no cover
                 last_error = exc

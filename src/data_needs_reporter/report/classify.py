@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -71,16 +70,14 @@ def pack_thread(
     root = ordered[0]
     add_message(root, force=True)
 
-    exec_messages = [msg for msg in ordered if msg.get("user_id") in exec_ids and msg is not root]
+    exec_messages = [
+        msg for msg in ordered if msg.get("user_id") in exec_ids and msg is not root
+    ]
     exec_messages.sort(key=sort_key)
     for msg in exec_messages:
         add_message(msg)
 
-    remaining = [
-        msg
-        for msg in ordered
-        if msg.get("message_id") not in added_ids
-    ]
+    remaining = [msg for msg in ordered if msg.get("message_id") not in added_ids]
     remaining.sort(
         key=lambda msg: (
             msg.get(score_field, 0.0) or 0.0,

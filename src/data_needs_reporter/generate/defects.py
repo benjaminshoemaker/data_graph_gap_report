@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import math
 import random
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, MutableMapping, Sequence
+from typing import Any, Dict, Iterable, Mapping, Sequence
 
 from data_needs_reporter.config import AppConfig
 from data_needs_reporter.generate.warehouse import (
-    WAREHOUSE_SCHEMAS,
     _ensure_polars,
     _write_table,
     generate_marketplace_dims,
@@ -66,14 +65,18 @@ def inject_fk_failures(
     df = df.with_row_count("_row_idx")
     if missing_indices:
         df = df.with_columns(
-            polars.when(polars.col("_row_idx").is_in(polars.Series(list(missing_indices))))
+            polars.when(
+                polars.col("_row_idx").is_in(polars.Series(list(missing_indices)))
+            )
             .then(polars.lit(None))
             .otherwise(polars.col(fk_column))
             .alias(fk_column)
         )
     if invalid_indices:
         df = df.with_columns(
-            polars.when(polars.col("_row_idx").is_in(polars.Series(list(invalid_indices))))
+            polars.when(
+                polars.col("_row_idx").is_in(polars.Series(list(invalid_indices)))
+            )
             .then(polars.lit(max_id + rng.randint(1000, 5000)))
             .otherwise(polars.col(fk_column))
             .alias(fk_column)
@@ -135,11 +138,9 @@ def inject_null_spikes(
         rate_pct = float(entry.get("rate_pct", 0))
         if day is None or rate_pct <= 0:
             continue
-        candidate_indices = (
-            df.filter(polars.col("_event_day") == polars.lit(day))
-            ["_row_idx"]
-            .to_list()
-        )
+        candidate_indices = df.filter(polars.col("_event_day") == polars.lit(day))[
+            "_row_idx"
+        ].to_list()
         if not candidate_indices:
             continue
         target = max(1, int(len(candidate_indices) * rate_pct / 100))
@@ -169,7 +170,9 @@ def inject_schema_gap(
     )
 
 
-def apply_typical_neobank_defects(cfg: AppConfig, out_dir: Path, seed: int | None = None) -> Dict[str, Any]:
+def apply_typical_neobank_defects(
+    cfg: AppConfig, out_dir: Path, seed: int | None = None
+) -> Dict[str, Any]:
     polars = _ensure_polars()
     rng = random.Random((seed if seed is not None else cfg.warehouse.seed) + 333)
 
@@ -196,7 +199,9 @@ def apply_typical_neobank_defects(cfg: AppConfig, out_dir: Path, seed: int | Non
     for offset in (60, 130):
         schedule.append(
             {
-                "day": (base_date + timedelta(days=offset)).replace(hour=0, minute=0, second=0, microsecond=0),
+                "day": (base_date + timedelta(days=offset)).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                ),
                 "rate_pct": 12.0,
             }
         )
@@ -207,12 +212,16 @@ def apply_typical_neobank_defects(cfg: AppConfig, out_dir: Path, seed: int | Non
     gap_end = gap_start + timedelta(hours=12)
     txn_df = inject_schema_gap(txn_df, "event_time", gap_start, gap_end)
 
-    _write_table("neobank", "fact_card_transaction", txn_df.to_dicts(), out_path, polars)
+    _write_table(
+        "neobank", "fact_card_transaction", txn_df.to_dicts(), out_path, polars
+    )
 
     invoice_df = inject_key_nulls(invoice_df, ["plan_id"], 1.8, rng)
     invoice_df = inject_duplicates(invoice_df, "invoice_id", 0.4, rng)
     invoice_df = apply_ingest_lag(invoice_df, "paid_at", "loaded_at", rng)
-    _write_table("neobank", "fact_subscription_invoice", invoice_df.to_dicts(), out_path, polars)
+    _write_table(
+        "neobank", "fact_subscription_invoice", invoice_df.to_dicts(), out_path, polars
+    )
 
     metrics = _measure_neobank_defects(txn_df, invoice_df, card_df)
     return metrics
@@ -221,7 +230,9 @@ def apply_typical_neobank_defects(cfg: AppConfig, out_dir: Path, seed: int | Non
 def _measure_neobank_defects(txn_df, invoice_df, card_df) -> Dict[str, Any]:
     polars = _ensure_polars()
     total_txn = txn_df.height or 1
-    key_null_rate = txn_df.filter(polars.col("merchant_id").is_null()).height / total_txn
+    key_null_rate = (
+        txn_df.filter(polars.col("merchant_id").is_null()).height / total_txn
+    )
     valid_card_ids = set(card_df["card_id"].to_list())
     fk_fail_rate = (
         txn_df.filter(
@@ -237,7 +248,9 @@ def _measure_neobank_defects(txn_df, invoice_df, card_df) -> Dict[str, Any]:
     ]
     p95_lag = _percentile(lag_minutes, 0.95)
     spike_days = (
-        txn_df.with_columns(polars.col("event_time").dt.truncate("1d").alias("event_day"))
+        txn_df.with_columns(
+            polars.col("event_time").dt.truncate("1d").alias("event_day")
+        )
         .groupby("event_day")
         .agg(
             [
@@ -250,7 +263,9 @@ def _measure_neobank_defects(txn_df, invoice_df, card_df) -> Dict[str, Any]:
         .to_dicts()
     )
     subscriber_attach = (
-        invoice_df["customer_id"].n_unique() / invoice_df.height if invoice_df.height else 0
+        invoice_df["customer_id"].n_unique() / invoice_df.height
+        if invoice_df.height
+        else 0
     )
     return {
         "merchant_key_null_rate": key_null_rate,
@@ -261,7 +276,9 @@ def _measure_neobank_defects(txn_df, invoice_df, card_df) -> Dict[str, Any]:
     }
 
 
-def apply_typical_marketplace_defects(cfg: AppConfig, out_dir: Path, seed: int | None = None) -> Dict[str, Any]:
+def apply_typical_marketplace_defects(
+    cfg: AppConfig, out_dir: Path, seed: int | None = None
+) -> Dict[str, Any]:
     polars = _ensure_polars()
     rng = random.Random((seed if seed is not None else cfg.warehouse.seed) + 555)
     out_path = Path(out_dir)
@@ -274,16 +291,21 @@ def apply_typical_marketplace_defects(cfg: AppConfig, out_dir: Path, seed: int |
     payments_df = apply_ingest_lag(payments_df, "captured_at", "loaded_at", rng)
 
     _write_table("marketplace", "fact_order", orders_df.to_dicts(), out_path, polars)
-    _write_table("marketplace", "fact_payment", payments_df.to_dicts(), out_path, polars)
+    _write_table(
+        "marketplace", "fact_payment", payments_df.to_dicts(), out_path, polars
+    )
 
     return {
         "order_key_null_rate": (
-            orders_df.filter(polars.col("buyer_id").is_null()).height / (orders_df.height or 1)
+            orders_df.filter(polars.col("buyer_id").is_null()).height
+            / (orders_df.height or 1)
         ),
     }
 
 
-def run_typical_generation(cfg: AppConfig, archetype: str, out_dir: Path) -> Dict[str, Any]:
+def run_typical_generation(
+    cfg: AppConfig, archetype: str, out_dir: Path
+) -> Dict[str, Any]:
     archetype_key = archetype.lower()
     if archetype_key == "neobank":
         generate_neobank_dims(cfg, out_dir, seed=cfg.warehouse.seed)

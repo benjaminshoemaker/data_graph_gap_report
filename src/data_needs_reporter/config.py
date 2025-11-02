@@ -136,18 +136,16 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     merged = dict(base)
     for key, value in override.items():
-        if (
-            key in merged
-            and isinstance(merged[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
             merged[key] = _deep_merge(merged[key], value)
         else:
             merged[key] = value
     return merged
 
 
-def _apply_env_overrides(data: Dict[str, Any], env: Mapping[str, str]) -> Dict[str, Any]:
+def _apply_env_overrides(
+    data: Dict[str, Any], env: Mapping[str, str]
+) -> Dict[str, Any]:
     updated = json.loads(json.dumps(data))
     for var, path in ENV_TO_PATH.items():
         if var in env:
@@ -167,7 +165,9 @@ def _apply_cli_overrides(
     return updated
 
 
-def _assign_path(target: MutableMapping[str, Any], path: Tuple[str, ...], value: Any) -> None:
+def _assign_path(
+    target: MutableMapping[str, Any], path: Tuple[str, ...], value: Any
+) -> None:
     cursor: MutableMapping[str, Any] = target
     for part in path[:-1]:
         if part not in cursor or not isinstance(cursor[part], MutableMapping):

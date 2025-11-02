@@ -4,7 +4,7 @@ import math
 import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple, TYPE_CHECKING, Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from data_needs_reporter.config import AppConfig
 from data_needs_reporter.report.llm import RepairingLLMClient
@@ -77,14 +77,6 @@ def write_empty_comms(out_dir: Path) -> None:
         ("loaded_at", pl.Datetime(time_zone="UTC")),
     )
 
-    users_schema: Iterable[Tuple[str, "pl.DataType"]] = (
-        ("user_id", pl.Int64),
-        ("role", pl.Utf8),
-        ("department", pl.Utf8),
-        ("time_zone", pl.Utf8),
-        ("active", pl.Boolean),
-    )
-
     _write_empty(out_path / "slack_messages.parquet", slack_schema, polars)
     _write_empty(out_path / "email_messages.parquet", email_schema, polars)
     _write_empty(out_path / "nlq.parquet", nlq_schema, polars)
@@ -92,7 +84,9 @@ def write_empty_comms(out_dir: Path) -> None:
     write_parquet_atomic(out_path / "comms_users.parquet", users_df)
 
 
-def _write_empty(path: Path, schema: Iterable[Tuple[str, "pl.DataType"]], polars) -> None:
+def _write_empty(
+    path: Path, schema: Iterable[Tuple[str, "pl.DataType"]], polars
+) -> None:
     df = polars.DataFrame(
         [polars.Series(name, [], dtype=dtype) for name, dtype in schema]
     )
@@ -213,7 +207,9 @@ def _generate_users(polars, rng: random.Random, total_users: int = 200):
                     "user_id": user_id,
                     "role": role,
                     "department": role.replace("_", " ").title(),
-                    "time_zone": rng.choice(["America/Los_Angeles", "America/New_York", "UTC"]),
+                    "time_zone": rng.choice(
+                        ["America/Los_Angeles", "America/New_York", "UTC"]
+                    ),
                     "active": rng.random() > 0.05,
                 }
             )
@@ -277,8 +273,10 @@ def _generate_slack_messages(
         )
         message_id += 1
 
-    df = polars.DataFrame(rows) if rows else polars.DataFrame(
-        [polars.Series("message_id", [], dtype=polars.Int64)]
+    df = (
+        polars.DataFrame(rows)
+        if rows
+        else polars.DataFrame([polars.Series("message_id", [], dtype=polars.Int64)])
     )
     if rows:
         df = df.select(
@@ -473,7 +471,9 @@ def _generate_nlq_queries(
             [
                 polars.Series("query_id", [], dtype=polars.Int64),
                 polars.Series("user_id", [], dtype=polars.Int64),
-                polars.Series("submitted_at", [], dtype=polars.Datetime(time_zone="UTC")),
+                polars.Series(
+                    "submitted_at", [], dtype=polars.Datetime(time_zone="UTC")
+                ),
                 polars.Series("text", [], dtype=polars.Utf8),
                 polars.Series("parsed_intent", [], dtype=polars.Utf8),
                 polars.Series("tokens", [], dtype=polars.Int32),
@@ -512,7 +512,9 @@ def _estimate_tokens(
         else:
             p90 = 0
         planned = targets.get(source, len(values))
-        planned_tokens = int(math.ceil(p90 * planned * (1 + safety_margin))) if p90 else 0
+        planned_tokens = (
+            int(math.ceil(p90 * planned * (1 + safety_margin))) if p90 else 0
+        )
         estimates[source] = {
             "p90_tokens": p90,
             "planned_messages": planned,
@@ -525,7 +527,9 @@ def _estimate_tokens(
     return estimates
 
 
-def _build_quotas(day_bucket_counts: Mapping[str, Dict[str, Dict[str, int]]]) -> Dict[str, Any]:
+def _build_quotas(
+    day_bucket_counts: Mapping[str, Dict[str, Dict[str, int]]]
+) -> Dict[str, Any]:
     quotas: Dict[str, Any] = {}
     for source, day_map in day_bucket_counts.items():
         total = sum(sum(bucket_counts.values()) for bucket_counts in day_map.values())

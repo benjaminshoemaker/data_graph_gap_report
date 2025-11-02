@@ -4,11 +4,15 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("duckdb")
 pl = pytest.importorskip("polars")
-duckdb = pytest.importorskip("duckdb")
 
-from data_needs_reporter.utils.duck import attach_parquet_dir, open_db, safe_query
-from data_needs_reporter.utils.io import write_parquet_atomic
+from data_needs_reporter.utils.duck import (  # noqa: E402
+    attach_parquet_dir,
+    open_db,
+    safe_query,
+)
+from data_needs_reporter.utils.io import write_parquet_atomic  # noqa: E402
 
 
 def test_attach_parquet_dir_and_query(tmp_path: Path) -> None:

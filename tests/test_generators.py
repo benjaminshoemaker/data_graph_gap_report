@@ -6,8 +6,6 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-pl = pytest.importorskip("polars")
-
 from data_needs_reporter.cli import app
 from data_needs_reporter.config import DEFAULT_CONFIG_PATH, load_config
 from data_needs_reporter.generate.comms import COMM_USER_ROLE_MIX, write_empty_comms
@@ -22,6 +20,8 @@ from data_needs_reporter.generate.warehouse import (
     generate_neobank_facts,
     write_empty_warehouse,
 )
+
+pl = pytest.importorskip("polars")
 
 runner = CliRunner()
 
@@ -111,8 +111,8 @@ def test_generate_neobank_facts_baseline(tmp_path: Path) -> None:
     assert max_event <= base_start + timedelta(days=cfg.warehouse.months * 30)
 
     captured_ratio = (
-        (transactions["auth_result"] == "captured").sum() / transactions.height
-    )
+        transactions["auth_result"] == "captured"
+    ).sum() / transactions.height
     assert 0.955 <= captured_ratio <= 0.975
 
     subscriber_ids = invoices["customer_id"].unique()
@@ -174,8 +174,7 @@ def test_neobank_defects_targets(tmp_path: Path) -> None:
     assert 0.015 <= key_null_rate <= 0.03
 
     fk_failures = transactions.filter(
-        (pl.col("card_id").is_null())
-        | ~pl.col("card_id").is_in(dim_card["card_id"])
+        (pl.col("card_id").is_null()) | ~pl.col("card_id").is_in(dim_card["card_id"])
     )
     fk_rate = fk_failures.height / transactions.height if transactions.height else 0
     assert 0.04 <= fk_rate <= 0.07

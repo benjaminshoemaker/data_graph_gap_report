@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import contextvars
 import logging
 import uuid
 from contextlib import contextmanager
 from typing import Iterator, Optional, Union
 
-import contextvars
-
-_RUN_ID: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("dnr_run_id", default=None)
+_RUN_ID: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "dnr_run_id", default=None
+)
 
 
 class _RunIdFilter(logging.Filter):
