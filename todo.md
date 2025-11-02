@@ -6,12 +6,12 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 0. Repo + Tooling
 
-- [ ] Create repo skeleton per spec
-  - [ ] `pyproject.toml` with Poetry, deps: typer[all], pydantic, duckdb, pyarrow, polars, matplotlib, pytest
-  - [ ] `src/data_needs_reporter/` package scaffold
-  - [ ] `tests/` scaffold with pytest.ini
-  - [ ] `.gitignore`, `.env.example`, `README.md`
-- [ ] Configure console script `dnr`
+- [x] Create repo skeleton per spec
+  - [x] `pyproject.toml` with Poetry, deps: typer[all], pydantic, duckdb, pyarrow, polars, matplotlib, pytest
+  - [x] `src/data_needs_reporter/` package scaffold
+  - [x] `tests/` scaffold with pytest.ini
+  - [x] `.gitignore`, `.env.example`, `README.md`
+- [x] Configure console script `dnr`
 - [ ] Add pre-commit hooks (black, isort, ruff)
 - [ ] CI: GitHub Actions
   - [ ] Python 3.11 matrix on Linux/macOS
@@ -27,16 +27,23 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 1. Config + CLI
 
-- [ ] Implement `config.py` (Pydantic)
-  - [ ] Models mirror approved config excerpt
-  - [ ] `load_config` precedence: defaults → YAML → env → flags
-- [ ] Implement `cli.py` Typer app
-  - [ ] Global flags: `--config`, `--api-cap-usd`, `--window`, `--no-llm`
-  - [ ] Command stubs: `init`, `gen-warehouse`, `gen-comms`, `run-report`, `validate`, `eval-labels`, `quickstart`
-- [ ] Default YAML under `configs/default.yaml`
-- [ ] Tests
-  - [ ] `dnr --version` prints `0.1.0`
-  - [ ] Precedence tests (env beats YAML, flags beat env)
+- [x] Implement `config.py` (Pydantic)
+  - [x] Models mirror approved config excerpt
+  - [x] `load_config` precedence: defaults → YAML → env → flags
+- [x] Implement `cli.py` Typer app
+  - [x] Global flags: `--config`, `--api-cap-usd`, `--window`, `--no-llm`
+  - [x] Command stubs:
+    - [x] init
+    - [x] gen-warehouse
+    - [x] gen-comms
+    - [x] run-report
+    - [x] validate
+    - [x] eval-labels
+    - [x] quickstart
+- [x] Default YAML under `configs/default.yaml`
+- [x] Tests
+  - [x] `dnr --version` prints `0.1.0`
+  - [x] Precedence tests (env beats YAML, flags beat env)
 
 **Done when:** CLI parses flags, config validates, tests pass.
 
@@ -44,17 +51,17 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 2. Utils
 
-- [ ] `utils/io.py`
-  - [ ] Atomic JSON/Parquet/CSV read‑write
-  - [ ] Auto‑mkdir, temp‑rename
-- [ ] `utils/duck.py`
-  - [ ] `open_db`, `attach_parquet_dir`, `safe_query` with basic guards
-- [ ] `utils/logging.py`
-  - [ ] `init_logger`, run_id context manager
+- [x] `utils/io.py`
+  - [x] Atomic JSON/Parquet/CSV read‑write
+  - [x] Auto‑mkdir, temp‑rename
+- [x] `utils/duck.py`
+  - [x] `open_db`, `attach_parquet_dir`, `safe_query` with basic guards
+- [x] `utils/logging.py`
+  - [x] `init_logger`, run_id context manager
 - [ ] `utils/rand.py`
   - [ ] Seeded RNG helpers, distributions used by generators
-- [ ] `utils/cost_guard.py`
-  - [ ] Token estimate, cap tracking, write `budget.json`
+- [x] `utils/cost_guard.py`
+  - [x] Token estimate, cap tracking, write `budget.json`
 
 **Done when:** round‑trip IO, simple DuckDB query, logs carry run_id in tests.
 
@@ -62,14 +69,14 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 3. Warehouse: Schemas + Baseline Generation
 
-- [ ] Schema constants for both archetypes (columns + dtypes)
-- [ ] Command: `dnr gen-warehouse --dry-run` writes empty Parquet with correct schema
+- [x] Schema constants for both archetypes (columns + dtypes)
+- [x] Command: `dnr gen-warehouse --dry-run` writes empty Parquet with correct schema
 - **Neobank**
-  - [ ] Generate dims: customer, account, card, merchant, plan
-  - [ ] Generate facts: card transactions, subscription invoices (baseline, no defects)
+  - [x] Generate dims: customer, account, card, merchant, plan
+  - [x] Generate facts: card transactions, subscription invoices (baseline, no defects)
 - **Marketplace**
-  - [ ] Generate dims: buyer, seller, category, listing
-  - [ ] Generate facts: order, order_item, payment, snapshot_listing_daily
+  - [x] Generate dims: buyer, seller, category, listing
+  - [x] Generate facts: order, order_item, payment, snapshot_listing_daily
 - [ ] Attach DuckDB and run sanity SQL
   - [ ] Time bounds correct
   - [ ] Basic KPI queries run
@@ -80,13 +87,13 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 4. Defect Injection (Typical)
 
-- [ ] Implement `defects.py`
-  - [ ] Key nulls (2%±0.5 on required keys)
-  - [ ] FK failures (5%±1; 70% missing id, 30% temporal)
-  - [ ] Duplicates (0.7%±0.2 of business keys)
-  - [ ] Ingest lag with p95 120–240 min; 5% tail 4–12h; set `loaded_at`
-  - [ ] Null spikes 2×/qtr (+10% absolute) for one day, per target columns
-  - [ ] Schema gap window + backfill (per archetype)
+- [x] Implement `defects.py`
+  - [x] Key nulls (2%±0.5 on required keys)
+  - [x] FK failures (5%±1; 70% missing id, 30% temporal)
+  - [x] Duplicates (0.7%±0.2 of business keys)
+  - [x] Ingest lag with p95 120–240 min; 5% tail 4–12h; set `loaded_at`
+  - [x] Null spikes 2×/qtr (+10% absolute) for one day, per target columns
+  - [x] Schema gap window + backfill (per archetype)
 - [ ] Calibration loop emits `data_quality_summary.json`
 
 **Done when:** post‑injection metrics measured in tests match targets.
@@ -95,18 +102,18 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 5. Comms: Schemas, Users, LLM Generation
 
-- [ ] Write Parquet schemas:
-  - [ ] `slack_messages`, `email_messages`, `comms_users`, `nlq`
-- [ ] Users with role mix; IDs only
-- [ ] LLM client + on‑disk cache (`.cache/llm`)
-  - [ ] Provider: OpenAI; model: `gpt-4o-mini`; JSON‑only guard; timeout 15s; retries 2; repair once
-  - [ ] Mock client for tests
-- [ ] Generate Slack/Email/NLQ
-  - [ ] Volumes: Slack 3k threads, Email 800, NLQ 1k; 12‑month window
-  - [ ] Token caps per item
+- [x] Write Parquet schemas:
+  - [x] `slack_messages`, `email_messages`, `comms_users`, `nlq`
+- [x] Users with role mix; IDs only
+- [x] LLM client + on‑disk cache (`.cache/llm`)
+  - [x] Provider: OpenAI; model: `gpt-4o-mini`; JSON‑only guard; timeout 15s; retries 2; repair once
+  - [x] Mock client for tests
+- [x] Generate Slack/Email/NLQ
+  - [x] Volumes: Slack 3k threads, Email 800, NLQ 1k; 12‑month window
+  - [x] Token caps per item
   - [ ] Allowed link domains placeholders
-  - [ ] `$1` cap per archetype with `cost_guard`
-  - [ ] Write `budget.json`
+  - [x] `$1` cap per archetype with `cost_guard`
+  - [x] Write `budget.json`
 
 **Done when:** generation stops before cap, volumes within ±5%, cache hits on rerun.
 
@@ -114,14 +121,14 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 6. Prefilter + Sampling + Coverage
 
-- [ ] Implement prefilter scoring (bucket allowlist, keywords, structure, roles, event correlation)
-- [ ] Threshold 0.35; else top‑30/day/channel fallback
-- [ ] Preflight token p90 per source
+- [x] Implement prefilter scoring (bucket allowlist, keywords, structure, roles, event correlation)
+- [x] Threshold 0.35; else top‑30/day/channel fallback
+- [x] Preflight token p90 per source
 - [ ] Sample‑to‑fit allocator
-  - [ ] 25% safety margin
-  - [ ] Day×bucket quotas with minimum per bucket
-- [ ] Coverage floors 20% per source
-  - [ ] Behavior C if floor missed (continue, weights unchanged)
+  - [x] 25% safety margin
+  - [x] Day×bucket quotas with minimum per bucket
+- [x] Coverage floors 20% per source
+  - [x] Behavior C if floor missed (continue, weights unchanged)
 
 **Done when:** `budget.json` reports estimates, actuals, coverage by bucket; floors enforced.
 
@@ -132,9 +139,9 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 - [ ] Compute per‑table:
   - [ ] key_null_pct, fk_success_pct, orphan_pct, dup_key_pct, p95_ingest_lag_min
   - [ ] Null spike detection (daily vs 7‑day median +8.0)
-- [ ] SLO check using config thresholds
-- [ ] Plots:
-  - [ ] `lag_p95_daily.png`, `key_null_pct_daily.png`, `orphan_pct_daily.png`, `dup_key_pct_bar.png`, `theme_demand_monthly.png`
+- [x] SLO check using config thresholds
+- [x] Plots:
+  - [x] `lag_p95_daily.png`, `key_null_pct_daily.png`, `orphan_pct_daily.png`, `dup_key_pct_bar.png`, `theme_demand_monthly.png`
 
 **Done when:** values match injected signals; images written with stable hashes in tests.
 
@@ -144,11 +151,15 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 - [ ] Role‑aware thread packing (root + all execs + top‑scored newest→oldest)
   - [ ] Caps: ≤900 input tokens, ≤20 messages
-- [ ] LLM classify
-  - [ ] Slack/Email: theme + relevance
-  - [ ] NLQ: theme only
-  - [ ] Guardrails: parse repair, 50 consecutive parse error stop per source
-- [ ] Save predictions Parquet with confidences
+- [x] LLM classify
+  - [x] Slack/Email: theme + relevance
+  - [x] NLQ: theme only
+  - [x] Guardrails: parse repair, 50 consecutive parse error stop per source
+- [x] Save predictions Parquet with confidences
+- [ ] Extract tables/columns via LLM
+  - [ ] Cap spend $0.10
+  - [ ] Cache reused across runs
+  - [ ] Save `entities.parquet`
 
 **Done when:** predictions saved; parse errors excluded from demand with counts.
 
@@ -175,8 +186,8 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [ ] Neobank: Interchange + Subs at risk
   - [ ] Marketplace: Net revenue at risk
   - [ ] Normalize by trailing 3‑month median monthly revenue
-- [ ] Health severity vs SLO overage
-- [ ] Recency decay: exp(−days_since_peak/60)
+- [x] Health severity vs SLO overage
+- [x] Recency decay: exp(−days_since_peak/60)
 
 **Done when:** unit tests verify formula outputs on fixtures.
 
@@ -184,10 +195,10 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 11. Prioritization, Confidence, Diversity
 
-- [ ] Score = 0.60*Revenue + 0.25*Demand + 0.15*Severity
+- [x] Score = 0.60*Revenue + 0.25*Demand + 0.15*Severity
 - [ ] Enforce theme diversity for top‑3
-- [ ] Confidence = 0.45*ClassConf + 0.25*EntityConf + 0.20*Coverage + 0.10*Agreement
-- [ ] Gate: hide actions with Confidence < 0.55
+- [x] Confidence = 0.45*ClassConf + 0.25*EntityConf + 0.20*Coverage + 0.10*Agreement
+- [x] Gate: hide actions with Confidence < 0.55
 
 **Done when:** synthetic cases show correct diversity and gating.
 
@@ -195,11 +206,11 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 12. Reports
 
-- [ ] `data_health.json` and `data_health.csv` per schema
-- [ ] `themes.json` and `themes.md` with examples
-- [ ] `exec_summary.json` and `exec_summary.md` with top‑3
-- [ ] Figures saved under `figures/`
-- [ ] Validate against JSON schemas in tests
+- [x] `data_health.json` and `data_health.csv` per schema
+- [x] `themes.json` and `themes.md` with examples
+- [x] `exec_summary.json` and `exec_summary.md` with top‑3
+- [x] Figures saved under `figures/`
+- [x] Validate against JSON schemas in tests
 
 **Done when:** schema validation passes; files exist; MD renders.
 
@@ -283,13 +294,13 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 ## 18. Docs
 
 - [ ] README sections
-  - [ ] Quickstart
-  - [ ] Commands and flags
-  - [ ] Config precedence
+  - [x] Quickstart
+  - [x] Commands and flags
+  - [x] Config precedence
   - [ ] Seeds and reproducibility
   - [ ] Spend caps and budgeting
   - [ ] Validation and eval
-  - [ ] Troubleshooting (parse errors, low coverage, cap hits)
+  - [x] Troubleshooting (parse errors, low coverage, cap hits)
 - [ ] `CONTRIBUTING.md` (tests, style, releases)
 - [ ] `docs/architecture.md` (module map and flows)
 

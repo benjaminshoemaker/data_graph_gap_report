@@ -1,0 +1,73 @@
+{
+  "paths": {
+    "data": "data",
+    "comms": "comms",
+    "reports": "reports",
+    "meta": "meta"
+  },
+  "warehouse": {
+    "archetypes": ["neobank", "marketplace"],
+    "scale": "evaluation",
+    "quality": "typical",
+    "trajectory": "T1",
+    "tz": "America/Los_Angeles",
+    "months": 18,
+    "seed": 42
+  },
+  "comms": {
+    "slack_threads": 3000,
+    "email_threads": 800,
+    "nlq": 1000,
+    "sample_policy": "event_aware",
+    "seed": 43
+  },
+  "classification": {
+    "engine": "llm",
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "temperature": 0.0,
+    "max_output_tokens": 64,
+    "concurrency": 5,
+    "api_cap_usd": 1.0,
+    "prefilter_threshold": 0.35,
+    "env_key_var": "OPENAI_API_KEY"
+  },
+  "entities": {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "api_cap_usd": 0.1
+  },
+  "report": {
+    "scoring_weights": {
+      "revenue": 0.6,
+      "demand": 0.25,
+      "severity": 0.15
+    },
+    "slos": {
+      "key_null_pct": 1.0,
+      "fk_orphan_pct": 2.0,
+      "dup_keys_pct": 0.2,
+      "p95_ingest_lag_min": 90.0
+    },
+    "window_days": 30,
+    "demand_base_weights": {
+      "nlq": 0.5,
+      "slack": 0.3,
+      "email": 0.2
+    },
+    "demand_weight_caps": {
+      "min": 0.15,
+      "max": 0.6
+    },
+    "revenue_norm": "median_3m"
+  },
+  "budget": {
+    "mode": "sample_to_fit",
+    "safety_margin": 0.25,
+    "coverage_floor_pct": 20
+  },
+  "cache": {
+    "enabled": true,
+    "dir": ".cache/llm"
+  }
+}
