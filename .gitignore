@@ -38,9 +38,6 @@ env/
 # Mac
 .DS_Store
 
-# Poetry
-poetry.lock
-
 # Local data outputs
 data/
 comms/
