@@ -77,11 +77,18 @@ def write_empty_comms(out_dir: Path) -> None:
         ("loaded_at", pl.Datetime(time_zone="UTC")),
     )
 
+    users_schema: Iterable[Tuple[str, "pl.DataType"]] = (
+        ("user_id", pl.Int64),
+        ("role", pl.Utf8),
+        ("department", pl.Utf8),
+        ("time_zone", pl.Utf8),
+        ("active", pl.Boolean),
+    )
+
     _write_empty(out_path / "slack_messages.parquet", slack_schema, polars)
     _write_empty(out_path / "email_messages.parquet", email_schema, polars)
     _write_empty(out_path / "nlq.parquet", nlq_schema, polars)
-    users_df = _generate_users(polars, random.Random(0))
-    write_parquet_atomic(out_path / "comms_users.parquet", users_df)
+    _write_empty(out_path / "comms_users.parquet", users_schema, polars)
 
 
 def _write_empty(
