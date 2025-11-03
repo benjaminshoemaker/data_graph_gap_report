@@ -21,6 +21,7 @@ from data_needs_reporter.generate.warehouse import (
     write_empty_warehouse,
 )
 from data_needs_reporter.report.llm import MockProvider, RepairingLLMClient
+from data_needs_reporter.report.metrics import TABLE_METRIC_SPECS, compute_data_health
 from data_needs_reporter.report.plots import (
     plot_dup_key_pct_bar,
     plot_key_null_pct_daily,
@@ -40,6 +41,26 @@ def _version_callback(ctx: typer.Context, value: Optional[bool]) -> Optional[boo
         return value
     typer.echo(__version__)
     raise typer.Exit()
+
+
+def _detect_archetype_from_path(warehouse: Path, config: AppConfig) -> str:
+    candidate_files = {
+        "neobank": ["fact_card_transaction.parquet", "fact_subscription_invoice.parquet"],
+        "marketplace": ["fact_order.parquet", "fact_payment.parquet"],
+    }
+    candidates = [arch.lower() for arch in config.warehouse.archetypes]
+    name = warehouse.name.lower()
+    if name in candidate_files:
+        return name
+    for candidate in candidates:
+        files = candidate_files.get(candidate, [])
+        if any((warehouse / file_name).exists() for file_name in files):
+            return candidate
+    if name in candidates:
+        return name
+    if candidates:
+        return candidates[0]
+    return next(iter(TABLE_METRIC_SPECS.keys()), "neobank")
 
 
 @app.callback(invoke_without_command=True)
@@ -376,22 +397,20 @@ def run_report_cmd(
 
     now = datetime.utcnow().isoformat()
 
-    data_health = [
-        {
-            "table": "dim_customer",
-            "key_null_pct": 0.8,
-            "fk_orphan_pct": 1.2,
-            "dup_keys_pct": 0.1,
-            "p95_ingest_lag_min": 85,
-        },
-        {
-            "table": "fact_card_transaction",
-            "key_null_pct": 1.5,
-            "fk_orphan_pct": 4.8,
-            "dup_keys_pct": 0.3,
-            "p95_ingest_lag_min": 120,
-        },
-    ]
+    archetype_key = _detect_archetype_from_path(Path(warehouse), config)
+    data_health = compute_data_health(archetype_key, Path(warehouse))
+    if not data_health:
+        data_health = [
+            {
+                "table": "dim_customer",
+                "key_null_pct": 0.0,
+                "fk_orphan_pct": 0.0,
+                "dup_keys_pct": 0.0,
+                "p95_ingest_lag_min": 0.0,
+                "fk_success_pct": 100.0,
+                "row_count": 0,
+            }
+        ]
 
     (out_dir / "data_health.json").write_text(
         json.dumps({"tables": data_health}, indent=2), encoding="utf-8"
@@ -467,7 +486,7 @@ def run_report_cmd(
         {"day": "2024-01-02", "orphan_pct": 2.5},
         {"day": "2024-01-03", "orphan_pct": 2.1},
     ]
-    dup_by_table = {row["table"]: row["dup_keys_pct"] for row in data_health}
+    dup_by_table = {row["table"]: row.get("dup_keys_pct", 0.0) for row in data_health}
     monthly_theme = [
         {
             "month": "2023-11",

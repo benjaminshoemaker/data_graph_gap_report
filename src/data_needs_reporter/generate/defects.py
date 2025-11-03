@@ -15,6 +15,7 @@ from data_needs_reporter.generate.warehouse import (
     generate_neobank_dims,
     generate_neobank_facts,
 )
+from data_needs_reporter.utils.io import write_json_atomic
 
 
 def inject_key_nulls(df, columns: Sequence[str], rate_pct: float, rng: random.Random):
@@ -101,18 +102,42 @@ def inject_duplicates(df, business_key: str, rate_pct: float, rng: random.Random
     return df.vstack(duplicate_df)
 
 
-def apply_ingest_lag(df, event_col: str, loaded_at_col: str, rng: random.Random):
+def apply_ingest_lag(
+    df,
+    event_col: str,
+    loaded_at_col: str,
+    rng: random.Random,
+    *,
+    base_window: tuple[int, int] = (30, 180),
+    tail_window: tuple[int, int] = (240, 720),
+    tail_rate: float = 0.05,
+):
     polars = _ensure_polars()
     if df.height == 0:
         return df
     events = df[event_col].to_list()
+    total = len(events)
+    if total == 0:
+        return df
+
+    tail_rate = max(0.0, min(1.0, tail_rate))
+    tail_count = min(
+        total,
+        max(1, int(round(total * tail_rate))) if tail_rate > 0 else 0,
+    )
+    tail_indices = set(rng.sample(range(total), tail_count)) if tail_count else set()
+
+    base_min, base_max = base_window
+    tail_min, tail_max = tail_window
+
     lags: list[int] = []
-    for _ in events:
-        if rng.random() < 0.95:
-            lag = int(rng.uniform(30, 180))
+    for idx in range(total):
+        if idx in tail_indices:
+            lag = int(rng.uniform(tail_min, tail_max))
         else:
-            lag = int(rng.uniform(240, 720))
-        lags.append(lag)
+            lag = int(rng.uniform(base_min, base_max))
+        lags.append(max(lag, 0))
+
     loaded_values = [
         event + timedelta(minutes=lag) if event is not None else None
         for event, lag in zip(events, lags)
@@ -223,11 +248,12 @@ def apply_typical_neobank_defects(
         "neobank", "fact_subscription_invoice", invoice_df.to_dicts(), out_path, polars
     )
 
-    metrics = _measure_neobank_defects(txn_df, invoice_df, card_df)
-    return metrics
+    summary = _summarize_neobank_quality(txn_df, invoice_df, card_df)
+    write_json_atomic(out_path / "data_quality_summary.json", summary)
+    return summary
 
 
-def _measure_neobank_defects(txn_df, invoice_df, card_df) -> Dict[str, Any]:
+def _summarize_neobank_quality(txn_df, invoice_df, card_df) -> Dict[str, Any]:
     polars = _ensure_polars()
     total_txn = txn_df.height or 1
     key_null_rate = (
@@ -251,7 +277,7 @@ def _measure_neobank_defects(txn_df, invoice_df, card_df) -> Dict[str, Any]:
         txn_df.with_columns(
             polars.col("event_time").dt.truncate("1d").alias("event_day")
         )
-        .groupby("event_day")
+        .group_by("event_day")
         .agg(
             [
                 polars.count().alias("rows"),
@@ -267,13 +293,113 @@ def _measure_neobank_defects(txn_df, invoice_df, card_df) -> Dict[str, Any]:
         if invoice_df.height
         else 0
     )
-    return {
-        "merchant_key_null_rate": key_null_rate,
-        "card_fk_failure_rate": fk_fail_rate,
-        "p95_ingest_lag_min": p95_lag,
-        "spike_days": spike_days,
-        "subscriber_attach_rate": subscriber_attach,
+    txn_dup_rate = max(total_txn - txn_df["txn_id"].n_unique(), 0) / total_txn
+    invoice_total = invoice_df.height or 1
+    invoice_null_rate = (
+        invoice_df.filter(polars.col("plan_id").is_null()).height / invoice_total
+    )
+    invoice_dup_rate = max(
+        invoice_total - invoice_df["invoice_id"].n_unique(), 0
+    ) / invoice_total
+    invoice_lag_minutes = [
+        ((loaded - paid).total_seconds() / 60)
+        for loaded, paid in zip(invoice_df["loaded_at"], invoice_df["paid_at"])
+        if loaded and paid
+    ]
+    invoice_p95_lag = _percentile(invoice_lag_minutes, 0.95)
+
+    spike_days_serialized = [
+        {**day, "event_day": day["event_day"].isoformat()}
+        for day in spike_days
+    ]
+
+    summary = {
+        "archetype": "neobank",
+        "targets": {
+            "merchant_key_null_pct": {"target_pct": 0.02, "tolerance_pct": 0.005},
+            "card_fk_orphan_pct": {"target_pct": 0.05, "tolerance_pct": 0.01},
+            "txn_dup_key_pct": {"target_pct": 0.007, "tolerance_pct": 0.002},
+            "invoice_plan_key_null_pct": {
+                "target_pct": 0.018,
+                "tolerance_pct": 0.004,
+            },
+            "invoice_dup_key_pct": {"target_pct": 0.004, "tolerance_pct": 0.002},
+            "txn_p95_ingest_lag_min": {"target_min": 120, "target_max": 240},
+            "invoice_p95_ingest_lag_min": {"target_min": 120, "target_max": 240},
+            "spike_day_count": {"target_count": 2, "tolerance": 1},
+        },
+        "aggregates": {
+            "merchant_key_null_pct": key_null_rate,
+            "card_fk_orphan_pct": fk_fail_rate,
+            "txn_dup_key_pct": txn_dup_rate,
+            "txn_p95_ingest_lag_min": p95_lag,
+            "spike_day_count": len(spike_days),
+            "invoice_plan_key_null_pct": invoice_null_rate,
+            "invoice_dup_key_pct": invoice_dup_rate,
+            "invoice_p95_ingest_lag_min": invoice_p95_lag,
+            "subscriber_attach_rate": subscriber_attach,
+        },
+        "per_table": {
+            "fact_card_transaction": {
+                "row_count": txn_df.height,
+                "merchant_key_null_pct": key_null_rate,
+                "card_fk_orphan_pct": fk_fail_rate,
+                "dup_key_pct": txn_dup_rate,
+                "p95_ingest_lag_min": p95_lag,
+                "spike_days": spike_days_serialized,
+            },
+            "fact_subscription_invoice": {
+                "row_count": invoice_df.height,
+                "plan_key_null_pct": invoice_null_rate,
+                "dup_key_pct": invoice_dup_rate,
+                "p95_ingest_lag_min": invoice_p95_lag,
+            },
+        },
     }
+    return summary
+
+
+def _summarize_marketplace_quality(orders_df, payments_df) -> Dict[str, Any]:
+    polars = _ensure_polars()
+    order_total = orders_df.height or 1
+    order_null_rate = (
+        orders_df.filter(polars.col("buyer_id").is_null()).height / order_total
+    )
+    order_dup_rate = max(
+        order_total - orders_df["order_id"].n_unique(), 0
+    ) / order_total
+    payment_lag_minutes = [
+        ((loaded - captured).total_seconds() / 60)
+        for loaded, captured in zip(payments_df["loaded_at"], payments_df["captured_at"])
+        if loaded and captured
+    ]
+    payment_p95_lag = _percentile(payment_lag_minutes, 0.95)
+
+    summary = {
+        "archetype": "marketplace",
+        "targets": {
+            "order_buyer_key_null_pct": {"target_pct": 0.015, "tolerance_pct": 0.004},
+            "order_dup_key_pct": {"target_pct": 0.005, "tolerance_pct": 0.002},
+            "payment_p95_ingest_lag_min": {"target_min": 120, "target_max": 240},
+        },
+        "aggregates": {
+            "order_buyer_key_null_pct": order_null_rate,
+            "order_dup_key_pct": order_dup_rate,
+            "payment_p95_ingest_lag_min": payment_p95_lag,
+        },
+        "per_table": {
+            "fact_order": {
+                "row_count": orders_df.height,
+                "buyer_key_null_pct": order_null_rate,
+                "dup_key_pct": order_dup_rate,
+            },
+            "fact_payment": {
+                "row_count": payments_df.height,
+                "p95_ingest_lag_min": payment_p95_lag,
+            },
+        },
+    }
+    return summary
 
 
 def apply_typical_marketplace_defects(
@@ -295,12 +421,9 @@ def apply_typical_marketplace_defects(
         "marketplace", "fact_payment", payments_df.to_dicts(), out_path, polars
     )
 
-    return {
-        "order_key_null_rate": (
-            orders_df.filter(polars.col("buyer_id").is_null()).height
-            / (orders_df.height or 1)
-        ),
-    }
+    summary = _summarize_marketplace_quality(orders_df, payments_df)
+    write_json_atomic(out_path / "data_quality_summary.json", summary)
+    return summary
 
 
 def run_typical_generation(

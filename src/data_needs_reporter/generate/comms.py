@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import math
 import random
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+from urllib.parse import urlparse
 
 from data_needs_reporter.config import AppConfig
 from data_needs_reporter.report.llm import RepairingLLMClient
@@ -21,11 +23,54 @@ if TYPE_CHECKING:  # pragma: no cover
 
 pl = _pl  # type: ignore[assignment]
 
+_URL_PATTERN = re.compile(r"https?://[^\s)]+", re.IGNORECASE)
+ALLOWED_LINK_DOMAINS = {
+    "looker",
+    "dbt",
+    "fivetran",
+    "snowflake",
+    "airflow",
+    "montecarlo",
+}
+BLOCKED_LINK_PLACEHOLDER = "[blocked-link]"
+
 
 def _ensure_polars():
     if pl is None:
         raise RuntimeError("polars is required for communications generation.")
     return pl
+
+
+def _canonical_domain(host: str) -> str | None:
+    if not host:
+        return None
+    normalized = host.lower()
+    if normalized.startswith("www."):
+        normalized = normalized[4:]
+    parts = normalized.split(".")
+    for allowed in ALLOWED_LINK_DOMAINS:
+        if allowed in parts:
+            return allowed
+    return None
+
+
+def _sanitize_links(text: str) -> tuple[str, List[str]]:
+    if not text:
+        return text, []
+
+    domains: List[str] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        url = match.group(0)
+        host = urlparse(url).hostname or ""
+        canonical = _canonical_domain(host)
+        if canonical:
+            domains.append(canonical)
+            return url
+        return BLOCKED_LINK_PLACEHOLDER
+
+    sanitized = _URL_PATTERN.sub(_replace, text)
+    return sanitized, domains
 
 
 COMM_USER_ROLE_MIX: Dict[str, float] = {
@@ -51,6 +96,7 @@ def write_empty_comms(out_dir: Path) -> None:
         ("bucket", pl.Utf8),
         ("body", pl.Utf8),
         ("tokens", pl.Int32),
+        ("link_domains", pl.List(pl.Utf8)),
         ("loaded_at", pl.Datetime(time_zone="UTC")),
     )
 
@@ -64,6 +110,7 @@ def write_empty_comms(out_dir: Path) -> None:
         ("sent_at", pl.Datetime(time_zone="UTC")),
         ("bucket", pl.Utf8),
         ("tokens", pl.Int32),
+        ("link_domains", pl.List(pl.Utf8)),
         ("loaded_at", pl.Datetime(time_zone="UTC")),
     )
 
@@ -168,6 +215,12 @@ def generate_comms(
             "nlq": nlq_stats["count"],
         },
         targets,
+        {
+            "slack": slack_stats["day_bucket"],
+            "email": email_stats["day_bucket"],
+            "nlq": nlq_stats["day_bucket"],
+        },
+        quotas,
     )
 
     guard.write_budget(
@@ -254,7 +307,8 @@ def _generate_slack_messages(
         )
         response = llm_client.json_complete(prompt, temperature=0.2)
         content = response or {}
-        body = content.get("body", "Investigated anomaly in revenue dashboard.")
+        raw_body = content.get("body", "Investigated anomaly in revenue dashboard.")
+        body, link_domains = _sanitize_links(raw_body)
         bucket = content.get("bucket", rng.choice(buckets))
         tokens = int(content.get("tokens", max(20, len(body) // 4)))
         if not guard.record_message("slack", tokens):
@@ -275,6 +329,7 @@ def _generate_slack_messages(
                 "bucket": bucket,
                 "body": body,
                 "tokens": tokens,
+                "link_domains": link_domains,
                 "loaded_at": sent_at + timedelta(minutes=rng.randint(2, 20)),
             }
         )
@@ -296,6 +351,7 @@ def _generate_slack_messages(
                 polars.col("bucket").cast(polars.Utf8),
                 polars.col("body").cast(polars.Utf8),
                 polars.col("tokens").cast(polars.Int32),
+                polars.col("link_domains").cast(polars.List(polars.Utf8)),
                 polars.col("loaded_at").cast(polars.Datetime(time_zone="UTC")),
             ]
         )
@@ -310,6 +366,7 @@ def _generate_slack_messages(
                 polars.Series("bucket", [], dtype=polars.Utf8),
                 polars.Series("body", [], dtype=polars.Utf8),
                 polars.Series("tokens", [], dtype=polars.Int32),
+                polars.Series("link_domains", [], dtype=polars.List(polars.Utf8)),
                 polars.Series("loaded_at", [], dtype=polars.Datetime(time_zone="UTC")),
             ]
         )
@@ -347,7 +404,8 @@ def _generate_email_messages(
         prompt = "Produce an email summary of a data need with subject, body, bucket, tokens."
         response = llm_client.json_complete(prompt, temperature=0.1)
         content = response or {}
-        body = content.get("body", "Requesting deeper analysis on retention funnel.")
+        raw_body = content.get("body", "Requesting deeper analysis on retention funnel.")
+        body, link_domains = _sanitize_links(raw_body)
         subject = content.get("subject", "Follow-up on data health")
         bucket = content.get("bucket", "data_quality")
         tokens = int(content.get("tokens", max(25, len(body) // 4)))
@@ -372,6 +430,7 @@ def _generate_email_messages(
                 "sent_at": sent_at,
                 "bucket": bucket,
                 "tokens": tokens,
+                "link_domains": link_domains,
                 "loaded_at": sent_at + timedelta(minutes=rng.randint(10, 45)),
             }
         )
@@ -389,6 +448,7 @@ def _generate_email_messages(
                 polars.col("sent_at").cast(polars.Datetime(time_zone="UTC")),
                 polars.col("bucket").cast(polars.Utf8),
                 polars.col("tokens").cast(polars.Int32),
+                polars.col("link_domains").cast(polars.List(polars.Utf8)),
                 polars.col("loaded_at").cast(polars.Datetime(time_zone="UTC")),
             ]
         )
@@ -404,6 +464,7 @@ def _generate_email_messages(
                 polars.Series("sent_at", [], dtype=polars.Datetime(time_zone="UTC")),
                 polars.Series("bucket", [], dtype=polars.Utf8),
                 polars.Series("tokens", [], dtype=polars.Int32),
+                polars.Series("link_domains", [], dtype=polars.List(polars.Utf8)),
                 polars.Series("loaded_at", [], dtype=polars.Datetime(time_zone="UTC")),
             ]
         )
@@ -534,21 +595,34 @@ def _estimate_tokens(
     return estimates
 
 
+def _aggregate_bucket_totals(day_map: Mapping[str, Dict[str, int]]) -> Dict[str, int]:
+    totals: Dict[str, int] = {}
+    for bucket_counts in day_map.values():
+        for bucket, count in bucket_counts.items():
+            totals[bucket] = totals.get(bucket, 0) + count
+    return totals
+
+
 def _build_quotas(
     day_bucket_counts: Mapping[str, Dict[str, Dict[str, int]]]
 ) -> Dict[str, Any]:
     quotas: Dict[str, Any] = {}
     for source, day_map in day_bucket_counts.items():
-        total = sum(sum(bucket_counts.values()) for bucket_counts in day_map.values())
+        bucket_totals = _aggregate_bucket_totals(day_map)
+        total = sum(bucket_totals.values())
         quotas[source] = {
             "total": total,
             "day_bucket": day_map,
+            "bucket_totals": bucket_totals,
         }
     return quotas
 
 
 def _coverage_report(
-    actual_counts: Mapping[str, int], targets: Mapping[str, int]
+    actual_counts: Mapping[str, int],
+    targets: Mapping[str, int],
+    day_bucket_counts: Mapping[str, Dict[str, Dict[str, int]]],
+    quotas: Mapping[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
     report: Dict[str, Any] = {}
     for source, actual in actual_counts.items():
@@ -558,12 +632,32 @@ def _coverage_report(
         behavior = "continue"
         if not met_floor:
             behavior = "behavior_c_continue"
+
+        per_bucket: Dict[str, Any] = {}
+        bucket_actuals = _aggregate_bucket_totals(day_bucket_counts.get(source, {}))
+        bucket_targets = quotas.get(source, {}).get("bucket_totals", {})
+        bucket_keys = set(bucket_actuals) | set(bucket_targets)
+        for bucket in sorted(bucket_keys):
+            actual_bucket = bucket_actuals.get(bucket, 0)
+            target_bucket = bucket_targets.get(bucket, 0)
+            bucket_cov = (
+                actual_bucket / target_bucket if target_bucket else 1.0
+            )
+            per_bucket[bucket] = {
+                "actual": actual_bucket,
+                "target": target_bucket,
+                "coverage_pct": round(bucket_cov, 3),
+            }
+
         report[source] = {
-            "actual": actual,
-            "target": target,
-            "coverage_pct": round(coverage_pct, 3),
-            "met_floor": met_floor,
-            "behavior": behavior,
+            "overall": {
+                "actual": actual,
+                "target": target,
+                "coverage_pct": round(coverage_pct, 3),
+                "met_floor": met_floor,
+                "behavior": behavior,
+            },
+            "per_bucket": per_bucket,
         }
     return report
 

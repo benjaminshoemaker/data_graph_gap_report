@@ -8,7 +8,11 @@ from typer.testing import CliRunner
 
 from data_needs_reporter.cli import app
 from data_needs_reporter.config import DEFAULT_CONFIG_PATH, load_config
-from data_needs_reporter.generate.comms import COMM_USER_ROLE_MIX, write_empty_comms
+from data_needs_reporter.generate.comms import (
+    COMM_USER_ROLE_MIX,
+    generate_comms,
+    write_empty_comms,
+)
 from data_needs_reporter.generate.defects import apply_typical_neobank_defects
 from data_needs_reporter.generate.warehouse import (
     MARKETPLACE_TABLE_SCHEMAS,
@@ -20,6 +24,9 @@ from data_needs_reporter.generate.warehouse import (
     generate_neobank_facts,
     write_empty_warehouse,
 )
+from data_needs_reporter.report.llm import MockProvider, RepairingLLMClient
+from data_needs_reporter.utils.cost_guard import CostGuard
+from data_needs_reporter.utils.io import read_json
 
 pl = pytest.importorskip("polars")
 
@@ -161,7 +168,25 @@ def test_neobank_defects_targets(tmp_path: Path) -> None:
     cfg = load_config(DEFAULT_CONFIG_PATH, None, env={}, cli_overrides={})
     generate_neobank_dims(cfg, tmp_path, seed=222)
     generate_neobank_facts(cfg, tmp_path, tmp_path, seed=333)
-    metrics = apply_typical_neobank_defects(cfg, tmp_path, seed=444)
+    summary = apply_typical_neobank_defects(cfg, tmp_path, seed=444)
+    summary_path = tmp_path / "data_quality_summary.json"
+    assert summary_path.exists()
+    stored = read_json(summary_path)
+    assert stored == summary
+
+    aggregates = summary["aggregates"]
+    assert 0.015 <= aggregates["merchant_key_null_pct"] <= 0.03
+    assert 0.04 <= aggregates["card_fk_orphan_pct"] <= 0.07
+    assert 0.005 <= aggregates["txn_dup_key_pct"] <= 0.01
+    assert 120 <= aggregates["txn_p95_ingest_lag_min"] <= 240
+    assert aggregates["spike_day_count"] >= 1
+    assert 0.014 <= aggregates["invoice_plan_key_null_pct"] <= 0.024
+    assert 0.002 <= aggregates["invoice_dup_key_pct"] <= 0.006
+    assert 120 <= aggregates["invoice_p95_ingest_lag_min"] <= 240
+
+    per_table = summary["per_table"]["fact_card_transaction"]
+    if per_table["spike_days"]:
+        assert all(day["null_rate"] > 0.1 for day in per_table["spike_days"])
 
     transactions = pl.read_parquet(tmp_path / "fact_card_transaction.parquet")
     dim_card = pl.read_parquet(tmp_path / "dim_card.parquet")
@@ -191,9 +216,6 @@ def test_neobank_defects_targets(tmp_path: Path) -> None:
         p95 = lag_minutes[p95_index]
         assert 120 <= p95 <= 240
 
-    if metrics.get("spike_days"):
-        assert all(day["null_rate"] > 0.1 for day in metrics["spike_days"])
-
 
 def test_write_empty_comms_schemas(tmp_path: Path) -> None:
     write_empty_comms(tmp_path)
@@ -212,6 +234,7 @@ def test_write_empty_comms_schemas(tmp_path: Path) -> None:
         "bucket",
         "body",
         "tokens",
+        "link_domains",
         "loaded_at",
     ]
     assert email.columns == [
@@ -224,6 +247,7 @@ def test_write_empty_comms_schemas(tmp_path: Path) -> None:
         "sent_at",
         "bucket",
         "tokens",
+        "link_domains",
         "loaded_at",
     ]
     assert nlq.columns == [
@@ -243,6 +267,65 @@ def test_write_empty_comms_schemas(tmp_path: Path) -> None:
         "active",
     ]
     assert slack.height == email.height == nlq.height == users.height == 0
+
+
+def test_comms_filters_link_domains(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    cfg = load_config(DEFAULT_CONFIG_PATH, None, env={}, cli_overrides={})
+    cfg.cache.dir = str(tmp_path / "cache")
+    cfg.comms.slack_threads = 2
+    cfg.comms.email_threads = 2
+    cfg.comms.nlq = 0
+
+    body_text = (
+        "See https://reports.badcorp.io/dashboard and"
+        " https://app.looker.com/dash/123 for context."
+    )
+    provider = MockProvider(
+        response={
+            "content": {
+                "body": body_text,
+                "bucket": "data_quality",
+                "subject": "Link Check",
+                "text": "Need outlook",
+                "parsed_intent": "data_gap",
+                "tokens": 40,
+            }
+        }
+    )
+    client = RepairingLLMClient(
+        provider=provider,
+        model=cfg.classification.model,
+        api_key_env=cfg.classification.env_key_var,
+        timeout_s=5.0,
+        max_output_tokens=cfg.classification.max_output_tokens,
+        cache_dir=tmp_path / "cache",
+        repair_attempts=1,
+    )
+    guard = CostGuard(cap_usd=5.0, price_per_1k_tokens=0.1)
+
+    generate_comms(cfg, "neobank", tmp_path / "comms", client, guard, seed=902)
+
+    slack = pl.read_parquet(tmp_path / "comms" / "slack_messages.parquet")
+    email = pl.read_parquet(tmp_path / "comms" / "email_messages.parquet")
+
+    allowed = {"looker", "dbt", "fivetran", "snowflake", "airflow", "montecarlo"}
+
+    for df in (slack, email):
+        assert df.height > 0
+        domain_rows = df["link_domains"].to_list()
+        all_domains = {dom for row in domain_rows for dom in row}
+        assert all_domains <= allowed
+        bodies = df["body"].to_list()
+        assert all("badcorp" not in body for body in bodies)
+        assert any("[blocked-link]" in body for body in bodies)
+
+    combined_domains = {
+        dom for df in (slack, email) for row in df["link_domains"].to_list() for dom in row
+    }
+    assert "looker" in combined_domains
 
 
 def test_comm_user_role_mix_sums_to_one() -> None:

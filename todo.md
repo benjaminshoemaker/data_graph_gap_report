@@ -18,8 +18,8 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [x] Cache Poetry and pip
   - [x] Run unit + integration tests
   - [x] Upload coverage
-- [ ] Makefile/justfile targets
-  - [ ] `make test`, `make lint`, `make fmt`, `make e2e`
+- [x] Makefile/justfile targets
+  - [x] `make test`, `make lint`, `make fmt`, `make e2e`
 
 **Done when:** `dnr --help` works, CI is green on empty skeleton.
 
@@ -58,8 +58,8 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [x] `open_db`, `attach_parquet_dir`, `safe_query` with basic guards
 - [x] `utils/logging.py`
   - [x] `init_logger`, run_id context manager
-- [ ] `utils/rand.py`
-  - [ ] Seeded RNG helpers, distributions used by generators
+- [x] `utils/rand.py`
+  - [x] Seeded RNG helpers, distributions used by generators
 - [x] `utils/cost_guard.py`
   - [x] Token estimate, cap tracking, write `budget.json`
 
@@ -77,9 +77,9 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 - **Marketplace**
   - [x] Generate dims: buyer, seller, category, listing
   - [x] Generate facts: order, order_item, payment, snapshot_listing_daily
-- [ ] Attach DuckDB and run sanity SQL
-  - [ ] Time bounds correct
-  - [ ] Basic KPI queries run
+- [x] Attach DuckDB and run sanity SQL
+  - [x] Time bounds correct
+  - [x] Basic KPI queries run
 
 **Done when:** row counts within Evaluation targets (±10% allowed before defects), keys unique, RI holds.
 
@@ -94,7 +94,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [x] Ingest lag with p95 120–240 min; 5% tail 4–12h; set `loaded_at`
   - [x] Null spikes 2×/qtr (+10% absolute) for one day, per target columns
   - [x] Schema gap window + backfill (per archetype)
-- [ ] Calibration loop emits `data_quality_summary.json`
+- [x] Calibration loop emits `data_quality_summary.json`
 
 **Done when:** post‑injection metrics measured in tests match targets.
 
@@ -111,7 +111,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 - [x] Generate Slack/Email/NLQ
   - [x] Volumes: Slack 3k threads, Email 800, NLQ 1k; 12‑month window
   - [x] Token caps per item
-  - [ ] Allowed link domains placeholders
+  - [x] Allowed link domains placeholders
   - [x] `$1` cap per archetype with `cost_guard`
   - [x] Write `budget.json`
 
@@ -124,7 +124,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 - [x] Implement prefilter scoring (bucket allowlist, keywords, structure, roles, event correlation)
 - [x] Threshold 0.35; else top‑30/day/channel fallback
 - [x] Preflight token p90 per source
-- [ ] Sample‑to‑fit allocator
+- [x] Sample‑to‑fit allocator
   - [x] 25% safety margin
   - [x] Day×bucket quotas with minimum per bucket
 - [x] Coverage floors 20% per source
@@ -149,7 +149,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 8. Classification
 
-- [ ] Role‑aware thread packing (root + all execs + top‑scored newest→oldest)
+- [x] Role‑aware thread packing (root + all execs + top‑scored newest→oldest)
   - [ ] Caps: ≤900 input tokens, ≤20 messages
 - [x] LLM classify
   - [x] Slack/Email: theme + relevance
@@ -159,7 +159,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 - [ ] Extract tables/columns via LLM
   - [ ] Cap spend $0.10
   - [ ] Cache reused across runs
-  - [ ] Save `entities.parquet`
+  - [x] Save `entities.parquet`
 
 **Done when:** predictions saved; parse errors excluded from demand with counts.
 
@@ -170,7 +170,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 - [ ] LLM extract tables/columns from positives (Slack/Email) and all NLQ
 - [ ] Use known dictionaries; return up to 5 tables and 8 columns with confidences
 - [ ] Cap spend at $0.10 per archetype; cache enabled
-- [ ] Save `entities.parquet`
+- [x] Save `entities.parquet`
 
 **Done when:** outputs limited to known names; confidences in [0,1].
 
