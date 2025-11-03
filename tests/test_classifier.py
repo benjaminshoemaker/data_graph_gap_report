@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -15,7 +15,9 @@ from data_needs_reporter.report.classify import (
     pack_thread,
     save_predictions,
 )
+from data_needs_reporter.report.entities import EntityExtractionConfig
 from data_needs_reporter.report.llm import LLMError, MockProvider, RepairingLLMClient
+from data_needs_reporter.report.run import run_entity_extraction_for_archetype
 from data_needs_reporter.report.prefilter import prefilter_messages
 from data_needs_reporter.utils.cost_guard import CostGuard
 
@@ -111,8 +113,9 @@ def test_generate_comms_respects_cap(
     assert summary["nlq"] == 0
     budget = json.loads((tmp_path / "comms" / "budget.json").read_text())
     assert budget["stopped_due_to_cap"] is True
-    assert budget["coverage"]["slack"]["met_floor"] is False
-    assert budget["coverage"]["slack"]["behavior"] == "behavior_c_continue"
+    slack_cov = budget["coverage"]["slack"]["overall"]
+    assert slack_cov["met_floor"] is False
+    assert slack_cov["behavior"] == "behavior_c_continue"
     assert budget["estimate"]["total_tokens"] <= budget["token_budget"]
 
 
@@ -168,8 +171,15 @@ def test_generate_comms_hits_requested_volume(
     assert summary["nlq"] == nlq.height
     assert budget["estimate"]["total_tokens"] <= budget["token_budget"]
     for source in ("slack", "email", "nlq"):
-        assert budget["coverage"][source]["met_floor"] is True
+        overall = budget["coverage"][source]["overall"]
+        assert overall["met_floor"] is True
+        per_bucket = budget["coverage"][source]["per_bucket"]
+        assert isinstance(per_bucket, dict)
     assert "quotas" in budget
+    quotas = budget["quotas"]
+    for source in ("slack", "email", "nlq"):
+        assert "bucket_totals" in quotas[source]
+        assert isinstance(quotas[source]["day_bucket"], dict)
 
 
 def test_prefilter_high_signal_passes_threshold():
@@ -234,8 +244,189 @@ def test_pack_thread_respects_caps():
     )
     assert len(packed["messages"]) <= 20
     assert packed["token_total"] <= 200
-    root_ids = {messages[0]["message_id"]}
-    assert root_ids.issubset({msg["message_id"] for msg in packed["messages"]})
+    selected_ids = {msg["message_id"] for msg in packed["messages"]}
+    assert messages[0]["message_id"] in selected_ids
+    assert {messages[1]["message_id"], messages[2]["message_id"]} <= selected_ids
+
+
+def test_pack_thread_prioritizes_score_and_recency():
+    base = datetime(2024, 2, 1, tzinfo=timezone.utc)
+    messages = [
+        {
+            "message_id": 1,
+            "thread_id": 7,
+            "user_id": 10,
+            "body": "Root message",
+            "tokens": 40,
+            "sent_at": base,
+            "prefilter_score": 0.1,
+        },
+        {
+            "message_id": 2,
+            "thread_id": 7,
+            "user_id": 200,
+            "body": "Executive context",
+            "tokens": 50,
+            "sent_at": base + timedelta(minutes=1),
+            "prefilter_score": 0.4,
+        },
+        {
+            "message_id": 3,
+            "thread_id": 7,
+            "user_id": 11,
+            "body": "Older high score",
+            "tokens": 30,
+            "sent_at": base + timedelta(minutes=2),
+            "prefilter_score": 0.9,
+        },
+        {
+            "message_id": 4,
+            "thread_id": 7,
+            "user_id": 12,
+            "body": "Newer high score",
+            "tokens": 30,
+            "sent_at": base + timedelta(minutes=3),
+            "prefilter_score": 0.9,
+        },
+        {
+            "message_id": 5,
+            "thread_id": 7,
+            "user_id": 13,
+            "body": "Lower score",
+            "tokens": 30,
+            "sent_at": base + timedelta(minutes=4),
+            "prefilter_score": 0.7,
+        },
+    ]
+
+    packed = pack_thread(
+        messages,
+        exec_user_ids={200},
+        max_messages=3,
+        max_tokens=300,
+    )
+    selected_ids = {msg["message_id"] for msg in packed["messages"]}
+    assert {1, 2}.issubset(selected_ids)
+    assert 4 in selected_ids
+    assert 3 not in selected_ids
+
+
+def test_entity_extraction_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pl = pytest.importorskip("polars")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    slack_df = pl.DataFrame(
+        {
+            "message_id": [1, 2],
+            "body": [
+                "Investigate fact_card_transaction spikes in amount_cents",
+                "Unrelated chatter",
+            ],
+        }
+    )
+    email_df = pl.DataFrame(
+        {
+            "message_id": [10],
+            "subject": ["FYI"],
+            "body": ["Columns missing"],
+        }
+    )
+    nlq_df = pl.DataFrame(
+        {
+            "query_id": [101],
+            "text": ["Show fact_card_transaction amount_cents by merchant_id"],
+        }
+    )
+
+    predictions_df = pl.DataFrame(
+        {
+            "thread_id": [1, 2],
+            "source": ["slack", "email"],
+            "relevance": [0.85, 0.2],
+            "message_ids": [[1], [10]],
+        }
+    )
+
+    class EntityProvider(MockProvider):
+        def __init__(self) -> None:
+            super().__init__(response={})
+
+        def json_complete(self, payload):  # type: ignore[override]
+            self._called += 1
+            return {
+                "content": {
+                    "tables": [
+                        {"name": "fact_card_transaction", "confidence": 0.82},
+                        {"name": "unknown_table", "confidence": 0.9},
+                    ],
+                    "columns": [
+                        {
+                            "table": "fact_card_transaction",
+                            "column": "amount_cents",
+                            "confidence": 0.76,
+                        },
+                        "fact_card_transaction.merchant_id",
+                        {
+                            "table": "other_table",
+                            "column": "foo",
+                            "confidence": 0.2,
+                        },
+                    ],
+                    "confidence": 0.9,
+                    "tokens": 200,
+                }
+            }
+
+    provider = EntityProvider()
+    client = RepairingLLMClient(
+        provider=provider,
+        model="mock-model",
+        api_key_env="OPENAI_API_KEY",
+        timeout_s=5.0,
+        max_output_tokens=64,
+        cache_dir=tmp_path / "cache-entities",
+        repair_attempts=0,
+    )
+
+    dictionary = {
+        "fact_card_transaction": ["amount_cents", "merchant_id"],
+        "dim_customer": ["customer_id"],
+    }
+
+    out_path = tmp_path / "entities.parquet"
+    config = EntityExtractionConfig(cap_usd=0.05)
+    results, stats = run_entity_extraction_for_archetype(
+        "neobank",
+        client,
+        slack_messages=slack_df,
+        email_messages=email_df,
+        nlq_messages=nlq_df,
+        predictions=predictions_df,
+        out_path=out_path,
+        dictionary=dictionary,
+        config=config,
+        relevance_threshold=0.5,
+    )
+
+    assert out_path.exists()
+    df = pl.read_parquet(out_path)
+    assert df.height == 2  # slack + nlq
+    assert "email" not in df.select("source").to_series().to_list()
+
+    slack_row = df.filter(pl.col("source") == "slack").to_dicts()[0]
+    tables = slack_row["tables"]
+    assert tables and tables[0]["name"] == "fact_card_transaction"
+    assert 0.0 <= tables[0]["confidence"] <= 1.0
+    columns = slack_row["columns"]
+    column_names = {(col["table"], col["column"]) for col in columns}
+    assert ("fact_card_transaction", "amount_cents") in column_names
+    assert ("fact_card_transaction", "merchant_id") in column_names
+
+    nlq_row = df.filter(pl.col("source") == "nlq").to_dicts()[0]
+    assert nlq_row["columns"]
+
+    assert results
+    assert stats["cost_usd"] <= config.cap_usd
 
 
 def test_classify_threads_and_save_predictions(

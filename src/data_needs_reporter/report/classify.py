@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
@@ -31,11 +31,15 @@ def pack_thread(
 ) -> Dict[str, Any]:
     exec_ids = set(exec_user_ids or [])
 
-    def sort_key(msg: Mapping[str, Any]) -> Tuple[Any, Any]:
+    def time_value(msg: Mapping[str, Any]) -> float:
         sent_at = msg.get("sent_at")
         if isinstance(sent_at, datetime):
-            return (sent_at, msg.get("message_id"))
-        return (msg.get("message_id"), 0)
+            dt = sent_at.astimezone(timezone.utc) if sent_at.tzinfo else sent_at
+            return dt.timestamp()
+        return float(msg.get("message_id") or 0)
+
+    def sort_key(msg: Mapping[str, Any]) -> Tuple[float, Any]:
+        return (time_value(msg), msg.get("message_id"))
 
     ordered = sorted(messages, key=sort_key)
     if not ordered:
@@ -75,12 +79,19 @@ def pack_thread(
     ]
     exec_messages.sort(key=sort_key)
     for msg in exec_messages:
-        add_message(msg)
+        add_message(msg, force=True)
 
     remaining = [msg for msg in ordered if msg.get("message_id") not in added_ids]
+    def score_value(msg: Mapping[str, Any]) -> float:
+        score = msg.get(score_field)
+        try:
+            return float(score)
+        except (TypeError, ValueError):
+            return 0.0
+
     remaining.sort(
         key=lambda msg: (
-            msg.get(score_field, 0.0) or 0.0,
+            score_value(msg),
             sort_key(msg)[0],
         ),
         reverse=True,
@@ -89,6 +100,7 @@ def pack_thread(
     for msg in remaining:
         add_message(msg)
 
+    selected.sort(key=sort_key)
     return {"messages": selected, "token_total": token_total}
 
 

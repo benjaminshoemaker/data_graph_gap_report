@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, MutableMapping, Tuple
 
 from data_needs_reporter.config import AppConfig
 from data_needs_reporter.utils.io import write_parquet_atomic
+from data_needs_reporter.utils.rand import poisson_sample, zipf_weights
 
 try:  # pragma: no cover - optional dependency handling
     import polars as _pl
@@ -400,7 +401,7 @@ def generate_neobank_facts(
                 * seasonal_factor
             )
             lam = max(lam, 0.05)
-            events_today = _poisson_sample(rng, lam)
+            events_today = poisson_sample(rng, lam)
             if events_today == 0:
                 continue
 
@@ -581,7 +582,7 @@ def generate_marketplace_dims(
             category_id += 1
 
     category_ids = [c["category_id"] for c in categories if c["parent_id"] is not None]
-    category_weights = _zipf_weights(len(category_ids), 1.1)
+    category_weights = zipf_weights(len(category_ids), 1.1)
 
     seller_ids = [s["seller_id"] for s in sellers]
 
@@ -674,7 +675,7 @@ def generate_marketplace_facts(
         for s in sellers
         if listings_by_seller.get(int(s["seller_id"]))
     ]
-    seller_weights = _zipf_weights(len(seller_ids), 1.05) if seller_ids else []
+    seller_weights = zipf_weights(len(seller_ids), 1.05) if seller_ids else []
     if not seller_ids:
         raise ValueError("Listings are required to generate marketplace facts.")
 
@@ -698,7 +699,7 @@ def generate_marketplace_facts(
             break
         seasonal = 1 + 0.1 * math.sin((2 * math.pi * day_offset) / 14.0)
         lam = base_orders * day_weights[day_start.weekday()] * seasonal
-        events_today = _poisson_sample(rng, lam)
+        events_today = poisson_sample(rng, lam)
 
         for _ in range(events_today):
             seller_id = rng.choices(seller_ids, weights=seller_weights)[0]
@@ -836,18 +837,6 @@ def _ensure_polars():
     return pl
 
 
-def _poisson_sample(rng: random.Random, lam: float) -> int:
-    if lam <= 0:
-        return 0
-    L = math.exp(-lam)
-    k = 0
-    p = 1.0
-    while p > L:
-        k += 1
-        p *= rng.random()
-    return k - 1
-
-
 __all__ = [
     "NEOBANK_TABLE_SCHEMAS",
     "MARKETPLACE_TABLE_SCHEMAS",
@@ -860,9 +849,3 @@ __all__ = [
     "generate_marketplace_dims",
     "generate_marketplace_facts",
 ]
-
-
-def _zipf_weights(n: int, alpha: float) -> list[float]:
-    weights = [1 / ((idx + 1) ** alpha) for idx in range(n)]
-    total = sum(weights)
-    return [w / total for w in weights]

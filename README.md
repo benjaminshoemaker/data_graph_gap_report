@@ -68,3 +68,12 @@ Run the linters/formatters manually:
 ```bash
 pre-commit run --all-files
 ```
+
+Common make targets are available via Poetry:
+
+```bash
+make test   # pytest
+make lint   # ruff + isort --check-only
+make fmt    # black + isort
+make e2e    # quick quickstart flow
+```
