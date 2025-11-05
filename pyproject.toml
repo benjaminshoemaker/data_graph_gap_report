@@ -1,11 +1,23 @@
 [tool.poetry]
 name = "data-needs-reporter"
-version = "0.1.0"
+version = "0.1.1"
 description = "CLI for generating synthetic data needs reports."
-authors = ["Your Name <you@example.com>"]
-license = "UNLICENSED"
+authors = ["Data Needs Reporter Team <maintainers@dataneedsreporter.dev>"]
+license = "Proprietary"
 readme = "README.md"
+keywords = ["data", "analytics", "cli", "synthetic-data"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Information Technology",
+    "License :: Other/Proprietary License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Office/Business :: Financial :: Accounting",
+]
 packages = [{include = "data_needs_reporter", from = "src"}]
+include = ["src/data_needs_reporter/configs/default.yaml"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
