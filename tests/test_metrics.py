@@ -60,7 +60,9 @@ def _write_marketplace_taxonomy_fixture(base_path: Path, gmv_values: list[int]) 
     listings.write_parquet(base_path / "dim_listing.parquet")
 
     order_ids = list(range(1, len(gmv_values) + 1))
-    loaded_times = [datetime(2024, 1, 2 + idx, tzinfo=tz) for idx in range(len(gmv_values))]
+    loaded_times = [
+        datetime(2024, 1, 2 + idx, tzinfo=tz) for idx in range(len(gmv_values))
+    ]
     order_items = pl.DataFrame(
         {
             "order_id": order_ids,
@@ -155,7 +157,13 @@ def _write_neobank_monetization_fixture(
         {
             "merchant_id": [1, 2, 3, 4, 5],
             "mcc": [5001, 5002, 5003, 5004, 5005],
-            "name": ["Merchant A", "Merchant B", "Merchant C", "Merchant D", "Merchant E"],
+            "name": [
+                "Merchant A",
+                "Merchant B",
+                "Merchant C",
+                "Merchant D",
+                "Merchant E",
+            ],
         }
     )
     merchants.write_parquet(base_path / "dim_merchant.parquet")
@@ -250,9 +258,7 @@ def test_select_top_actions_fill_when_insufficient_unique():
     assert len(selected) == 3
     assert set(themes) == {"retention", "growth"}
     eligible = {
-        str(item["theme"])
-        for item in items
-        if item.get("confidence", 0.0) >= 0.55
+        str(item["theme"]) for item in items if item.get("confidence", 0.0) >= 0.55
     }
     assert len(set(themes)) == min(len(eligible), 3)
 
@@ -370,7 +376,10 @@ def test_neobank_revenue_risk() -> None:
     ]
 
     result = compute_neobank_revenue_risk(
-        transactions, invoices, affected_transaction_ids=[1, 2], affected_invoice_ids=[10]
+        transactions,
+        invoices,
+        affected_transaction_ids=[1, 2],
+        affected_invoice_ids=[10],
     )
 
     assert result["interchange_at_risk_usd"] == pytest.approx(3.9, rel=1e-3)
@@ -434,11 +443,13 @@ def test_detect_null_spikes_identifies_lift():
         day_time = base + timedelta(days=day)
         for idx in range(20):
             value = None if (day == 8 and idx < 15) else (idx + day)
-            rows.append({"event_time": day_time + timedelta(minutes=idx), "value": value})
+            rows.append(
+                {"event_time": day_time + timedelta(minutes=idx), "value": value}
+            )
     df = polars.DataFrame(rows).select(
         [
             polars.col("event_time").cast(polars.Datetime(time_zone="UTC")),
-            polars.col("value").cast(polars.Int64)
+            polars.col("value").cast(polars.Int64),
         ]
     )
 
@@ -543,7 +554,9 @@ def test_validate_monetization_targets_marketplace_fail(tmp_path: Path) -> None:
     warehouse = tmp_path / "marketplace_monetization_bad"
     _write_marketplace_taxonomy_fixture(warehouse, gmv)
     payments = pl.read_parquet(warehouse / "fact_payment.parquet")
-    payments = payments.with_columns((pl.col("platform_fee_cents") * 2).alias("platform_fee_cents"))
+    payments = payments.with_columns(
+        (pl.col("platform_fee_cents") * 2).alias("platform_fee_cents")
+    )
     payments.write_parquet(warehouse / "fact_payment.parquet")
     result = validate_monetization_targets(warehouse)
     assert result["passed"] is False

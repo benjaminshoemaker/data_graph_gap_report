@@ -180,4 +180,8 @@ def select_top_actions(
     return selected
 
 
-__all__ = ["build_entity_dictionary", "run_entity_extraction_for_archetype", "select_top_actions"]
+__all__ = [
+    "build_entity_dictionary",
+    "run_entity_extraction_for_archetype",
+    "select_top_actions",
+]

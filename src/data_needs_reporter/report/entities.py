@@ -78,7 +78,8 @@ def _normalize_column_items(
     default_conf: float,
 ) -> List[Dict[str, object]]:
     allowed: Dict[str, set[str]] = {
-        table: {col.lower() for col in columns} for table, columns in allowed_tables.items()
+        table: {col.lower() for col in columns}
+        for table, columns in allowed_tables.items()
     }
     items: List[Dict[str, object]] = []
     seen: set[Tuple[str, str]] = set()
@@ -109,9 +110,7 @@ def _normalize_column_items(
                 continue
             key = (canonical_table, canonical_column)
         else:
-            matches = [
-                tbl for tbl, cols in allowed.items() if canonical_column in cols
-            ]
+            matches = [tbl for tbl, cols in allowed.items() if canonical_column in cols]
             if len(matches) != 1:
                 continue
             canonical_table = matches[0]
@@ -182,7 +181,9 @@ def extract_entities(
             continue
         tokens_field = response.get("tokens")
         if isinstance(tokens_field, Mapping):
-            tokens_used = tokens_field.get("total_tokens") or tokens_field.get("prompt_tokens")
+            tokens_used = tokens_field.get("total_tokens") or tokens_field.get(
+                "prompt_tokens"
+            )
         else:
             tokens_used = tokens_field
         try:

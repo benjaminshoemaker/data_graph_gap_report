@@ -67,7 +67,9 @@ def trailing_monthly_revenue_median(
 ) -> float:
     if not monthly_totals:
         return 0.0
-    valid_months = [month for month in monthly_totals.keys() if isinstance(month, datetime)]
+    valid_months = [
+        month for month in monthly_totals.keys() if isinstance(month, datetime)
+    ]
     if not valid_months:
         return 0.0
     valid_months.sort()
@@ -108,9 +110,7 @@ def reweight_source_weights(
         uniform = 1.0 / len(base_weights)
         return {source: uniform for source in base_weights}
 
-    normalized = {
-        source: weight / raw_sum for source, weight in raw_weights.items()
-    }
+    normalized = {source: weight / raw_sum for source, weight in raw_weights.items()}
 
     weights: Dict[str, float] = {
         source: min(max(weight, min_weight), max_weight)
@@ -263,9 +263,7 @@ def post_stratified_item_weights(
     for item in items:
         key = _stratum_key(item)
         base_weight = (
-            _as_float(item.get(base_weight_field), 1.0)
-            if base_weight_field
-            else 1.0
+            _as_float(item.get(base_weight_field), 1.0) if base_weight_field else 1.0
         )
         base_weights.append(base_weight)
         strata_keys.append(key)
@@ -372,9 +370,7 @@ def compute_neobank_revenue_risk(
     txn_records = list(transactions or [])
     invoice_records = list(invoices or [])
     affected_txn_set = {int(tid) for tid in affected_transaction_ids if tid is not None}
-    affected_invoice_set = {
-        int(iid) for iid in affected_invoice_ids if iid is not None
-    }
+    affected_invoice_set = {int(iid) for iid in affected_invoice_ids if iid is not None}
 
     monthly_totals: Dict[datetime, float] = {}
     interchange_at_risk = 0.0
@@ -405,7 +401,9 @@ def compute_neobank_revenue_risk(
         amount_cents = _safe_float(invoice.get("amount_cents"), 0.0)
         subscription_usd = amount_cents / 100.0
         period_dt = _to_datetime(
-            invoice.get("period_start") or invoice.get("paid_at") or invoice.get("period_end")
+            invoice.get("period_start")
+            or invoice.get("paid_at")
+            or invoice.get("period_end")
         )
         month = _month_key(period_dt)
         if month is not None:
@@ -415,7 +413,9 @@ def compute_neobank_revenue_risk(
 
     revenue_at_risk = interchange_at_risk + subscription_at_risk
 
-    median_revenue = trailing_monthly_revenue_median(monthly_totals, window_months=window_months)
+    median_revenue = trailing_monthly_revenue_median(
+        monthly_totals, window_months=window_months
+    )
 
     if median_revenue > 0.0:
         revenue_risk_ratio = min(max(revenue_at_risk / median_revenue, 0.0), 1.0)
@@ -470,9 +470,7 @@ def compute_marketplace_revenue_risk(
             order_id_int = None
 
         gmv_usd = _safe_float(payment.get("buyer_paid_cents"), 0.0) / 100.0
-        platform_fee_usd = (
-            _safe_float(payment.get("platform_fee_cents"), 0.0) / 100.0
-        )
+        platform_fee_usd = _safe_float(payment.get("platform_fee_cents"), 0.0) / 100.0
 
         total_gmv += gmv_usd
         if platform_fee_usd > 0.0:
@@ -505,10 +503,12 @@ def compute_marketplace_revenue_risk(
             order_id_int = None
 
         gmv_usd = _safe_float(payment.get("buyer_paid_cents"), 0.0) / 100.0
-        platform_fee_usd = (
-            _safe_float(payment.get("platform_fee_cents"), 0.0) / 100.0
+        platform_fee_usd = _safe_float(payment.get("platform_fee_cents"), 0.0) / 100.0
+        net_revenue = (
+            platform_fee_usd
+            if platform_fee_usd > 0.0
+            else gmv_usd * effective_take_rate
         )
-        net_revenue = platform_fee_usd if platform_fee_usd > 0.0 else gmv_usd * effective_take_rate
 
         order_dt = order_time_lookup.get(order_id_int)
         if order_dt is None:
@@ -520,12 +520,12 @@ def compute_marketplace_revenue_risk(
         if order_id_int is not None and order_id_int in affected_orders:
             net_revenue_at_risk += gmv_usd * effective_take_rate
 
-    median_revenue = trailing_monthly_revenue_median(monthly_revenue, window_months=window_months)
+    median_revenue = trailing_monthly_revenue_median(
+        monthly_revenue, window_months=window_months
+    )
 
     if median_revenue > 0.0:
-        revenue_risk_ratio = min(
-            max(net_revenue_at_risk / median_revenue, 0.0), 1.0
-        )
+        revenue_risk_ratio = min(max(net_revenue_at_risk / median_revenue, 0.0), 1.0)
     else:
         revenue_risk_ratio = 0.0
 

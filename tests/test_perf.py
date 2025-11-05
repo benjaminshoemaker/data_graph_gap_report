@@ -16,7 +16,14 @@ runner = CliRunner()
 COMMAND_BUDGETS: tuple[tuple[str, list[str], float], ...] = (
     (
         "gen-warehouse",
-        ["gen-warehouse", "--archetype", "neobank", "--out", "data/neobank", "--dry-run"],
+        [
+            "gen-warehouse",
+            "--archetype",
+            "neobank",
+            "--out",
+            "data/neobank",
+            "--dry-run",
+        ],
         3.0,
     ),
     (

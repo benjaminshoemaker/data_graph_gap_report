@@ -310,7 +310,9 @@ def test_pack_thread_prioritizes_score_and_recency():
     assert 3 not in selected_ids
 
 
-def test_entity_extraction_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_entity_extraction_pipeline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     pl = pytest.importorskip("polars")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 

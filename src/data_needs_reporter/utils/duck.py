@@ -231,7 +231,9 @@ def run_warehouse_sanity(archetype: str, parquet_dir: Path) -> Dict[str, pl.Data
         else:
             min_order = None
             max_order = None
-        order_bounds = pl.DataFrame({"min_order": [min_order], "max_order": [max_order]})
+        order_bounds = pl.DataFrame(
+            {"min_order": [min_order], "max_order": [max_order]}
+        )
 
         orders_with_fee = orders.join(
             payments.select(["order_id", "platform_fee_cents"]),

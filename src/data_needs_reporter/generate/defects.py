@@ -298,9 +298,9 @@ def _summarize_neobank_quality(txn_df, invoice_df, card_df) -> Dict[str, Any]:
     invoice_null_rate = (
         invoice_df.filter(polars.col("plan_id").is_null()).height / invoice_total
     )
-    invoice_dup_rate = max(
-        invoice_total - invoice_df["invoice_id"].n_unique(), 0
-    ) / invoice_total
+    invoice_dup_rate = (
+        max(invoice_total - invoice_df["invoice_id"].n_unique(), 0) / invoice_total
+    )
     invoice_lag_minutes = [
         ((loaded - paid).total_seconds() / 60)
         for loaded, paid in zip(invoice_df["loaded_at"], invoice_df["paid_at"])
@@ -309,8 +309,7 @@ def _summarize_neobank_quality(txn_df, invoice_df, card_df) -> Dict[str, Any]:
     invoice_p95_lag = _percentile(invoice_lag_minutes, 0.95)
 
     spike_days_serialized = [
-        {**day, "event_day": day["event_day"].isoformat()}
-        for day in spike_days
+        {**day, "event_day": day["event_day"].isoformat()} for day in spike_days
     ]
 
     summary = {
@@ -365,12 +364,14 @@ def _summarize_marketplace_quality(orders_df, payments_df) -> Dict[str, Any]:
     order_null_rate = (
         orders_df.filter(polars.col("buyer_id").is_null()).height / order_total
     )
-    order_dup_rate = max(
-        order_total - orders_df["order_id"].n_unique(), 0
-    ) / order_total
+    order_dup_rate = (
+        max(order_total - orders_df["order_id"].n_unique(), 0) / order_total
+    )
     payment_lag_minutes = [
         ((loaded - captured).total_seconds() / 60)
-        for loaded, captured in zip(payments_df["loaded_at"], payments_df["captured_at"])
+        for loaded, captured in zip(
+            payments_df["loaded_at"], payments_df["captured_at"]
+        )
         if loaded and captured
     ]
     payment_p95_lag = _percentile(payment_lag_minutes, 0.95)

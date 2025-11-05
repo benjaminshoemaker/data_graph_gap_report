@@ -202,7 +202,11 @@ def validate_warehouse_schema(warehouse_path: Path) -> Dict[str, object]:
         table_path = path / f"{table_name}.parquet"
         if not table_path.exists():
             issues.append(f"Missing table: {table_name}.parquet")
-        table_manifest_obj = tables_manifest.get(table_name) if isinstance(tables_manifest, Mapping) else None
+        table_manifest_obj = (
+            tables_manifest.get(table_name)
+            if isinstance(tables_manifest, Mapping)
+            else None
+        )
         if not isinstance(table_manifest_obj, Mapping):
             issues.append(f"Missing schema entry for table {table_name}")
             continue
@@ -223,9 +227,7 @@ def validate_warehouse_schema(warehouse_path: Path) -> Dict[str, object]:
 
     passed = not issues
     detail = (
-        f"Schema valid for archetype '{archetype}'."
-        if passed
-        else "; ".join(issues)
+        f"Schema valid for archetype '{archetype}'." if passed else "; ".join(issues)
     )
     return {
         "archetype": archetype,
@@ -268,7 +270,11 @@ def validate_volume_targets(
         issues.append(f"Missing schema manifest: {manifest_path}")
 
     for table_name, target_count in targets.items():
-        table_manifest = tables_manifest.get(table_name) if isinstance(tables_manifest, Mapping) else None
+        table_manifest = (
+            tables_manifest.get(table_name)
+            if isinstance(tables_manifest, Mapping)
+            else None
+        )
         if not isinstance(table_manifest, Mapping):
             issues.append(f"Missing manifest entry for table {table_name}")
             continue
@@ -439,9 +445,7 @@ def validate_seasonality_targets(warehouse_path: Path) -> Dict[str, object]:
     )
 
     dow_counts = (
-        enriched.group_by("_dow")
-        .agg(polars.count().alias("rows"))
-        .sort("_dow")
+        enriched.group_by("_dow").agg(polars.count().alias("rows")).sort("_dow")
     )
 
     issues: List[str] = []
@@ -485,9 +489,7 @@ def validate_seasonality_targets(warehouse_path: Path) -> Dict[str, object]:
         top_two = hour_counts.head(2)
         top_hours = [int(value) for value in top_two["hour"].to_list()]
         if not all(hour in PEAK_ALLOWED_HOURS for hour in top_hours):
-            issues.append(
-                f"Top hours {top_hours} must fall within 10–14 or 17–21."
-            )
+            issues.append(f"Top hours {top_hours} must fall within 10–14 or 17–21.")
         else:
             has_midday = any(hour in MIDDAY_HOURS for hour in top_hours)
             has_evening = any(hour in EVENING_HOURS for hour in top_hours)
@@ -551,9 +553,7 @@ def validate_taxonomy_targets(warehouse_path: Path) -> Dict[str, object]:
             merchants.select(polars.col("mcc").drop_nulls().n_unique())[0, 0]
         )
         if unique_mcc < NEOBANK_MCC_MIN:
-            detail = (
-                f"MCC coverage too narrow: {unique_mcc} < {NEOBANK_MCC_MIN} distinct MCCs."
-            )
+            detail = f"MCC coverage too narrow: {unique_mcc} < {NEOBANK_MCC_MIN} distinct MCCs."
             return {"passed": False, "issues": [detail], "detail": detail}
         detail = f"MCC coverage satisfied ({unique_mcc} unique MCCs)."
         return {"passed": True, "issues": [], "detail": detail}
@@ -681,7 +681,9 @@ def validate_taxonomy_targets(warehouse_path: Path) -> Dict[str, object]:
 
         if not issues:
             missing_top = [
-                cat_id for cat_id in top_level_ids if gmv_per_category.get(cat_id, 0) <= 0
+                cat_id
+                for cat_id in top_level_ids
+                if gmv_per_category.get(cat_id, 0) <= 0
             ]
             if missing_top:
                 issues.append(
@@ -700,7 +702,9 @@ def validate_taxonomy_targets(warehouse_path: Path) -> Dict[str, object]:
             detail = "; ".join(issues)
             return {"passed": False, "issues": issues, "detail": detail}
 
-        detail = "Marketplace taxonomy satisfied (all categories covered, balanced GMV)."
+        detail = (
+            "Marketplace taxonomy satisfied (all categories covered, balanced GMV)."
+        )
         return {"passed": True, "issues": [], "detail": detail}
 
     detail = f"Unsupported archetype '{archetype}' for taxonomy validation."
@@ -764,8 +768,9 @@ def validate_monetization_targets(warehouse_path: Path) -> Dict[str, object]:
                     if captured.height == 0:
                         captured = transactions
                 spend_cents = float(
-                    captured.select(polars.col("amount_cents").cast(polars.Float64).sum())
-                    .item()
+                    captured.select(
+                        polars.col("amount_cents").cast(polars.Float64).sum()
+                    ).item()
                     or 0.0
                 )
                 interchange_usd = float(
@@ -780,7 +785,9 @@ def validate_monetization_targets(warehouse_path: Path) -> Dict[str, object]:
                     or 0.0
                 )
                 if spend_cents <= 0.0:
-                    issues.append("Captured spend is zero; cannot validate interchange rate.")
+                    issues.append(
+                        "Captured spend is zero; cannot validate interchange rate."
+                    )
                 else:
                     interchange_rate = interchange_usd / (spend_cents / 100.0)
                     lower, upper = NEOBANK_INTERCHANGE_RANGE
@@ -804,17 +811,19 @@ def validate_monetization_targets(warehouse_path: Path) -> Dict[str, object]:
 
         if not issues and customers.height and "customer_id" in customers.columns:
             total_customers = int(
-                customers.select(polars.col("customer_id").cast(polars.Int64).n_unique())[
-                    0, 0
-                ]
+                customers.select(
+                    polars.col("customer_id").cast(polars.Int64).n_unique()
+                )[0, 0]
             )
             if total_customers <= 0:
-                issues.append("Customer population is zero; cannot compute attach rate.")
+                issues.append(
+                    "Customer population is zero; cannot compute attach rate."
+                )
             elif invoices.height and "customer_id" in invoices.columns:
                 attached = int(
-                    invoices.select(polars.col("customer_id").cast(polars.Int64).n_unique())[
-                        0, 0
-                    ]
+                    invoices.select(
+                        polars.col("customer_id").cast(polars.Int64).n_unique()
+                    )[0, 0]
                 )
                 attach_rate = attached / total_customers if total_customers else 0.0
                 lower, upper = NEOBANK_ATTACH_RANGE
@@ -826,11 +835,7 @@ def validate_monetization_targets(warehouse_path: Path) -> Dict[str, object]:
                     detail_parts.append(f"attach_rate={attach_rate:.4f}")
 
         passed = not issues
-        detail = (
-            "Monetization targets satisfied."
-            if passed
-            else "; ".join(issues)
-        )
+        detail = "Monetization targets satisfied." if passed else "; ".join(issues)
         if passed and detail_parts:
             detail = f"Monetization targets satisfied ({', '.join(detail_parts)})."
         return {"passed": passed, "issues": issues, "detail": detail}
@@ -849,7 +854,9 @@ def validate_monetization_targets(warehouse_path: Path) -> Dict[str, object]:
             detail = "No payments available to compute take rate."
             return {"passed": False, "issues": [detail], "detail": detail}
         if not {"buyer_paid_cents", "platform_fee_cents"}.issubset(payments.columns):
-            detail = "fact_payment must include 'buyer_paid_cents' and 'platform_fee_cents'."
+            detail = (
+                "fact_payment must include 'buyer_paid_cents' and 'platform_fee_cents'."
+            )
             return {"passed": False, "issues": [detail], "detail": detail}
 
         sums = payments.select(
@@ -868,9 +875,7 @@ def validate_monetization_targets(warehouse_path: Path) -> Dict[str, object]:
         take_rate = total_fee / total_paid
         lower, upper = MARKETPLACE_TAKE_RATE_RANGE
         if take_rate < lower or take_rate > upper:
-            detail = (
-                f"Marketplace take rate {take_rate:.4f} outside [{lower:.2f}, {upper:.2f}]."
-            )
+            detail = f"Marketplace take rate {take_rate:.4f} outside [{lower:.2f}, {upper:.2f}]."
             return {"passed": False, "issues": [detail], "detail": detail}
         detail = f"Monetization targets satisfied (take_rate={take_rate:.4f})."
         return {"passed": True, "issues": [], "detail": detail}
@@ -894,11 +899,7 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
     customer_path = path / "dim_customer.parquet"
     invoice_path = path / "fact_subscription_invoice.parquet"
 
-    missing = [
-        str(p.name)
-        for p in [customer_path, invoice_path]
-        if not p.exists()
-    ]
+    missing = [str(p.name) for p in [customer_path, invoice_path] if not p.exists()]
     if missing:
         detail = f"Missing required trajectory tables: {', '.join(missing)}."
         return {"passed": False, "issues": [detail], "detail": detail}
@@ -918,9 +919,7 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
     else:
         growth = (
             customers.with_columns(
-                polars.col("created_at")
-                .dt.strftime("%Y-%m")
-                .alias("_month")
+                polars.col("created_at").dt.strftime("%Y-%m").alias("_month")
             )
             .group_by("_month")
             .agg(polars.count().alias("new_customers"))
@@ -944,9 +943,7 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
                     )
                     break
             if counts[-1] < counts[0]:
-                issues.append(
-                    "Customer growth not increasing over timeframe."
-                )
+                issues.append("Customer growth not increasing over timeframe.")
             if not issues:
                 detail_parts.append("growth_monotonic")
 
@@ -955,7 +952,9 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
         else:
             total_customers = customers.height
             if total_customers > 0:
-                verified = customers.filter(polars.col("kyc_status") == "verified").height
+                verified = customers.filter(
+                    polars.col("kyc_status") == "verified"
+                ).height
                 verified_share = verified / total_customers
                 lower = KYC_VERIFIED_TARGET - KYC_TOLERANCE
                 upper = KYC_VERIFIED_TARGET + KYC_TOLERANCE
@@ -971,9 +970,7 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
     else:
         unique = (
             invoices.with_columns(
-                polars.col("paid_at")
-                .dt.strftime("%Y-%m")
-                .alias("_month")
+                polars.col("paid_at").dt.strftime("%Y-%m").alias("_month")
             )
             .select(["customer_id", "_month"])
             .unique()
@@ -984,7 +981,9 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
         else:
             month_sets: Dict[object, set[int]] = {}
             for month in month_values:
-                active_ids = unique.filter(polars.col("_month") == month).get_column("customer_id")
+                active_ids = unique.filter(polars.col("_month") == month).get_column(
+                    "customer_id"
+                )
                 month_sets[month] = {int(val) for val in active_ids.to_list()}
             total_active = 0
             churn_events = 0
@@ -998,7 +997,9 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
                 total_active += len(current_active)
                 churn_events += len(current_active - next_active)
             if total_active <= 0:
-                issues.append("Unable to compute churn rate due to zero active subscribers.")
+                issues.append(
+                    "Unable to compute churn rate due to zero active subscribers."
+                )
             else:
                 churn_rate = churn_events / total_active
                 lower = CHURN_TARGET - CHURN_TOLERANCE
@@ -1060,7 +1061,9 @@ def validate_comms_targets(comms_path: Path) -> Dict[str, object]:
                 .to_dict(as_series=False)
             )
             for bucket, count in zip(counts["bucket"], counts["count"]):
-                bucket_counts[str(bucket)] = bucket_counts.get(str(bucket), 0) + int(count)
+                bucket_counts[str(bucket)] = bucket_counts.get(str(bucket), 0) + int(
+                    count
+                )
 
         if filename == "slack_messages.parquet" and "is_exec" in data.columns:
             exec_count = data.filter(polars.col("is_exec")).height
@@ -1093,7 +1096,9 @@ def validate_comms_targets(comms_path: Path) -> Dict[str, object]:
             detail_parts.append("bucket_mix_ok")
 
     if total_threads <= 0:
-        issues.append("Unable to compute executive thread share; no thread information.")
+        issues.append(
+            "Unable to compute executive thread share; no thread information."
+        )
     else:
         exec_share = exec_count / total_threads
         lower, upper = EXEC_THREAD_SHARE_RANGE
@@ -1207,9 +1212,7 @@ def validate_theme_mix_targets(comms_path: Path) -> Dict[str, object]:
     actual_totals: Dict[str, float] = {}
     for source_info in coverage.values():
         per_bucket = (
-            source_info.get("per_bucket")
-            if isinstance(source_info, Mapping)
-            else None
+            source_info.get("per_bucket") if isinstance(source_info, Mapping) else None
         )
         if not isinstance(per_bucket, Mapping):
             continue
@@ -1244,9 +1247,7 @@ def validate_theme_mix_targets(comms_path: Path) -> Dict[str, object]:
                     f"Theme '{bucket}' share diff {diff:.3f} exceeds {THEME_SHARE_TOLERANCE:.2f}."
                 )
             else:
-                detail_parts.append(
-                    f"{bucket}={actual_share:.3f}/{plan_share:.3f}"
-                )
+                detail_parts.append(f"{bucket}={actual_share:.3f}/{plan_share:.3f}")
 
     passed = not issues
     detail = "Theme mix targets satisfied." if passed else "; ".join(issues)
@@ -1255,7 +1256,9 @@ def validate_theme_mix_targets(comms_path: Path) -> Dict[str, object]:
     return {"passed": passed, "issues": issues, "detail": detail}
 
 
-def validate_event_correlation(warehouse_path: Path, comms_path: Path) -> Dict[str, object]:
+def validate_event_correlation(
+    warehouse_path: Path, comms_path: Path
+) -> Dict[str, object]:
     polars = _require_polars()
     warehouse = Path(warehouse_path)
     comms = Path(comms_path)
@@ -1334,7 +1337,9 @@ def _coerce_float(value: object) -> Optional[float]:
         return None
 
 
-def validate_reproducibility(warehouse_path: Path, comms_path: Path) -> Dict[str, object]:
+def validate_reproducibility(
+    warehouse_path: Path, comms_path: Path
+) -> Dict[str, object]:
     issues: List[str] = []
     detail_parts: List[str] = []
 
@@ -1388,7 +1393,9 @@ def validate_reproducibility(warehouse_path: Path, comms_path: Path) -> Dict[str
             else:
                 algorithm = str(hashes.get("algorithm") or "sha256").lower()
                 if algorithm != "sha256":
-                    issues.append(f"Unsupported communications hash algorithm '{algorithm}'.")
+                    issues.append(
+                        f"Unsupported communications hash algorithm '{algorithm}'."
+                    )
                 files = hashes.get("files")
                 if not isinstance(files, Mapping) or not files:
                     issues.append("Communications hash manifest missing file hashes.")
@@ -1403,7 +1410,9 @@ def validate_reproducibility(warehouse_path: Path, comms_path: Path) -> Dict[str
                         if actual_hash != str(expected_hash):
                             mismatches.append(f"{name} mismatch")
                     if mismatches:
-                        issues.append("Communications hash mismatch: " + ", ".join(mismatches))
+                        issues.append(
+                            "Communications hash mismatch: " + ", ".join(mismatches)
+                        )
                     else:
                         comms_hash_ok = True
             seeds = budget.get("seeds")
@@ -1457,9 +1466,7 @@ def validate_spend_caps(comms_path: Path) -> Dict[str, object]:
         return {"passed": False, "issues": issues, "detail": "; ".join(issues)}
 
     if cost_usd > cap_usd + 1e-9:
-        issues.append(
-            f"LLM spend {cost_usd:.4f} exceeds cap {cap_usd:.4f}."
-        )
+        issues.append(f"LLM spend {cost_usd:.4f} exceeds cap {cap_usd:.4f}.")
 
     if bool(budget.get("stopped_due_to_cap")):
         issues.append("Cost guard reported cap stop.")
@@ -1755,7 +1762,9 @@ def _parse_event_timestamp(value: object) -> Optional[datetime]:
     return _ensure_timezone(parsed)
 
 
-def _collect_spike_events(summary: Optional[Mapping[str, object]]) -> List[Dict[str, object]]:
+def _collect_spike_events(
+    summary: Optional[Mapping[str, object]]
+) -> List[Dict[str, object]]:
     events: List[Dict[str, object]] = []
     if not isinstance(summary, Mapping):
         return events
@@ -1843,7 +1852,11 @@ def _load_thread_times(
     )
     if grouped.height == 0:
         return []
-    times = [_ensure_timezone(val) for val in grouped["_thread_time"].to_list() if val is not None]
+    times = [
+        _ensure_timezone(val)
+        for val in grouped["_thread_time"].to_list()
+        if val is not None
+    ]
     times.sort()
     return times
 
@@ -1866,6 +1879,7 @@ def _has_thread_in_window(
         if abs(ts - target) <= window:
             return True
     return False
+
 
 WAREHOUSE_SCHEMA_SPEC: Dict[str, Dict[str, Dict[str, str]]] = {
     "neobank": {
@@ -2025,8 +2039,10 @@ def compute_data_health(
     results: List[Dict[str, object]] = []
     for table_name, spec in specs:
         df = table_dfs.get(table_name)
-        if df is None or df.height == 0 or any(
-            col not in df.columns for col in spec.required_columns
+        if (
+            df is None
+            or df.height == 0
+            or any(col not in df.columns for col in spec.required_columns)
         ):
             metrics = dict(DEFAULT_METRIC_ROW)
             row_count = int(df.height) if df is not None else 0

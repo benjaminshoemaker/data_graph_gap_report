@@ -141,6 +141,7 @@ def _write_minimal_neobank_warehouse(path: Path) -> None:
         year = start.year + month // 12
         month = month % 12 + 1
         return datetime(year, month, 1, tzinfo=start.tzinfo)
+
     customers = []
     cid = 1
     for idx, count in enumerate(month_counts):
@@ -337,8 +338,12 @@ def _write_minimal_comms(path: Path) -> None:
         "hashes": {
             "algorithm": "sha256",
             "files": {
-                "slack_messages.parquet": compute_file_hash(path / "slack_messages.parquet"),
-                "email_messages.parquet": compute_file_hash(path / "email_messages.parquet"),
+                "slack_messages.parquet": compute_file_hash(
+                    path / "slack_messages.parquet"
+                ),
+                "email_messages.parquet": compute_file_hash(
+                    path / "email_messages.parquet"
+                ),
                 "nlq.parquet": compute_file_hash(path / "nlq.parquet"),
                 "comms_users.parquet": compute_file_hash(path / "comms_users.parquet"),
             },
@@ -364,6 +369,7 @@ def _write_minimal_comms(path: Path) -> None:
     (path / "nlq_parse_summary.json").write_text(
         json.dumps(parse_summary, indent=2), encoding="utf-8"
     )
+
 
 def test_version_flag_reports_package_version() -> None:
     from data_needs_reporter import __version__
@@ -508,17 +514,29 @@ def test_validate_passes_without_marker(tmp_path: Path) -> None:
         assert result.exit_code == 0
         summary = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
         assert summary["overall_pass"] is True
-        quality_check = next(check for check in summary["checks"] if check["name"] == "quality")
+        quality_check = next(
+            check for check in summary["checks"] if check["name"] == "quality"
+        )
         assert quality_check["passed"] is True
-        seasonality_check = next(check for check in summary["checks"] if check["name"] == "seasonality")
+        seasonality_check = next(
+            check for check in summary["checks"] if check["name"] == "seasonality"
+        )
         assert seasonality_check["passed"] is True
-        taxonomy_check = next(check for check in summary["checks"] if check["name"] == "taxonomy")
+        taxonomy_check = next(
+            check for check in summary["checks"] if check["name"] == "taxonomy"
+        )
         assert taxonomy_check["passed"] is True
-        monetization_check = next(check for check in summary["checks"] if check["name"] == "monetization")
+        monetization_check = next(
+            check for check in summary["checks"] if check["name"] == "monetization"
+        )
         assert monetization_check["passed"] is True
-        comms_check = next(check for check in summary["checks"] if check["name"] == "comms")
+        comms_check = next(
+            check for check in summary["checks"] if check["name"] == "comms"
+        )
         assert comms_check["passed"] is True
-        theme_mix_check = next(check for check in summary["checks"] if check["name"] == "theme_mix")
+        theme_mix_check = next(
+            check for check in summary["checks"] if check["name"] == "theme_mix"
+        )
         assert theme_mix_check["passed"] is True
 
 
@@ -547,7 +565,9 @@ def test_validate_strict_fails_on_missing_table(tmp_path: Path) -> None:
         assert result.exit_code == 1
         summary = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
         assert summary["overall_pass"] is False
-        schema_check = next(check for check in summary["checks"] if check["name"] == "schema")
+        schema_check = next(
+            check for check in summary["checks"] if check["name"] == "schema"
+        )
         assert schema_check["passed"] is False
 
 
@@ -579,7 +599,9 @@ def test_validate_strict_fails_on_volume(tmp_path: Path) -> None:
         assert result.exit_code == 1
         summary = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
         assert summary["overall_pass"] is False
-        volume_check = next(check for check in summary["checks"] if check["name"] == "volume")
+        volume_check = next(
+            check for check in summary["checks"] if check["name"] == "volume"
+        )
         assert volume_check["passed"] is False
 
 
@@ -609,9 +631,13 @@ def test_validate_strict_fails_on_quality(tmp_path: Path) -> None:
             ],
         )
         assert result.exit_code == 1
-        summary_out = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        summary_out = json.loads(
+            (out_dir / "qc_summary.json").read_text(encoding="utf-8")
+        )
         assert summary_out["overall_pass"] is False
-        quality_check = next(check for check in summary_out["checks"] if check["name"] == "quality")
+        quality_check = next(
+            check for check in summary_out["checks"] if check["name"] == "quality"
+        )
         assert quality_check["passed"] is False
 
 
@@ -655,7 +681,9 @@ def test_validate_strict_fails_on_seasonality(tmp_path: Path) -> None:
                 }
             )
             txn_id += 1
-        pl.DataFrame(bad_records).write_parquet(warehouse / "fact_card_transaction.parquet")
+        pl.DataFrame(bad_records).write_parquet(
+            warehouse / "fact_card_transaction.parquet"
+        )
         comms.mkdir()
         _write_minimal_comms(comms)
         out_dir = Path("reports") / "neobank" / "qc"
@@ -673,9 +701,13 @@ def test_validate_strict_fails_on_seasonality(tmp_path: Path) -> None:
             ],
         )
         assert result.exit_code == 1
-        summary_out = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        summary_out = json.loads(
+            (out_dir / "qc_summary.json").read_text(encoding="utf-8")
+        )
         assert summary_out["overall_pass"] is False
-        seasonality_check = next(check for check in summary_out["checks"] if check["name"] == "seasonality")
+        seasonality_check = next(
+            check for check in summary_out["checks"] if check["name"] == "seasonality"
+        )
         assert seasonality_check["passed"] is False
 
 
@@ -706,9 +738,13 @@ def test_validate_strict_fails_on_taxonomy(tmp_path: Path) -> None:
             ],
         )
         assert result.exit_code == 1
-        summary_out = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        summary_out = json.loads(
+            (out_dir / "qc_summary.json").read_text(encoding="utf-8")
+        )
         assert summary_out["overall_pass"] is False
-        taxonomy_check = next(check for check in summary_out["checks"] if check["name"] == "taxonomy")
+        taxonomy_check = next(
+            check for check in summary_out["checks"] if check["name"] == "taxonomy"
+        )
         assert taxonomy_check["passed"] is False
 
 
@@ -718,7 +754,9 @@ def test_validate_strict_fails_on_monetization(tmp_path: Path) -> None:
         comms = Path("comms")
         _write_minimal_neobank_warehouse(warehouse)
         transactions = pl.read_parquet(warehouse / "fact_card_transaction.parquet")
-        bad_transactions = transactions.with_columns(pl.lit(500.0).alias("interchange_bps"))
+        bad_transactions = transactions.with_columns(
+            pl.lit(500.0).alias("interchange_bps")
+        )
         bad_transactions.write_parquet(warehouse / "fact_card_transaction.parquet")
         comms.mkdir()
         _write_minimal_comms(comms)
@@ -737,9 +775,13 @@ def test_validate_strict_fails_on_monetization(tmp_path: Path) -> None:
             ],
         )
         assert result.exit_code == 1
-        summary_out = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        summary_out = json.loads(
+            (out_dir / "qc_summary.json").read_text(encoding="utf-8")
+        )
         assert summary_out["overall_pass"] is False
-        monetization_check = next(check for check in summary_out["checks"] if check["name"] == "monetization")
+        monetization_check = next(
+            check for check in summary_out["checks"] if check["name"] == "monetization"
+        )
         assert monetization_check["passed"] is False
 
 
@@ -777,9 +819,13 @@ def test_validate_strict_fails_on_trajectory(tmp_path: Path) -> None:
             ],
         )
         assert result.exit_code == 1
-        summary_out = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        summary_out = json.loads(
+            (out_dir / "qc_summary.json").read_text(encoding="utf-8")
+        )
         assert summary_out["overall_pass"] is False
-        trajectory_check = next(check for check in summary_out["checks"] if check["name"] == "trajectory")
+        trajectory_check = next(
+            check for check in summary_out["checks"] if check["name"] == "trajectory"
+        )
         assert trajectory_check["passed"] is False
 
 
@@ -819,9 +865,13 @@ def test_validate_strict_fails_on_theme_mix(tmp_path: Path) -> None:
             ],
         )
         assert result.exit_code == 1
-        summary_out = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        summary_out = json.loads(
+            (out_dir / "qc_summary.json").read_text(encoding="utf-8")
+        )
         assert summary_out["overall_pass"] is False
-        theme_mix_check = next(check for check in summary_out["checks"] if check["name"] == "theme_mix")
+        theme_mix_check = next(
+            check for check in summary_out["checks"] if check["name"] == "theme_mix"
+        )
         assert theme_mix_check["passed"] is False
 
 
@@ -834,9 +884,7 @@ def test_validate_strict_fails_on_event_correlation(tmp_path: Path) -> None:
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         summary.setdefault("per_table", {})
         summary["per_table"]["fact_card_transaction"] = {
-            "spike_days": [
-                {"event_day": "2024-01-04T00:00:00+00:00"}
-            ]
+            "spike_days": [{"event_day": "2024-01-04T00:00:00+00:00"}]
         }
         summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
         comms.mkdir()
@@ -856,9 +904,15 @@ def test_validate_strict_fails_on_event_correlation(tmp_path: Path) -> None:
             ],
         )
         assert result.exit_code == 1
-        summary_out = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        summary_out = json.loads(
+            (out_dir / "qc_summary.json").read_text(encoding="utf-8")
+        )
         assert summary_out["overall_pass"] is False
-        event_check = next(check for check in summary_out["checks"] if check["name"] == "event_correlation")
+        event_check = next(
+            check
+            for check in summary_out["checks"]
+            if check["name"] == "event_correlation"
+        )
         assert event_check["passed"] is False
         assert "24h" in event_check["detail"]
 
@@ -891,9 +945,15 @@ def test_validate_strict_fails_on_reproducibility(tmp_path: Path) -> None:
             ],
         )
         assert result.exit_code == 1
-        summary_out = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        summary_out = json.loads(
+            (out_dir / "qc_summary.json").read_text(encoding="utf-8")
+        )
         assert summary_out["overall_pass"] is False
-        repro_check = next(check for check in summary_out["checks"] if check["name"] == "reproducibility")
+        repro_check = next(
+            check
+            for check in summary_out["checks"]
+            if check["name"] == "reproducibility"
+        )
         assert repro_check["passed"] is False
 
 
@@ -926,9 +986,13 @@ def test_validate_strict_fails_on_spend_caps(tmp_path: Path) -> None:
             ],
         )
         assert result.exit_code == 1
-        summary_out = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        summary_out = json.loads(
+            (out_dir / "qc_summary.json").read_text(encoding="utf-8")
+        )
         assert summary_out["overall_pass"] is False
-        spend_check = next(check for check in summary_out["checks"] if check["name"] == "spend_caps")
+        spend_check = next(
+            check for check in summary_out["checks"] if check["name"] == "spend_caps"
+        )
         assert spend_check["passed"] is False
 
 
@@ -958,9 +1022,13 @@ def test_validate_strict_fails_on_nlq_tokens(tmp_path: Path) -> None:
             ],
         )
         assert result.exit_code == 1
-        summary_out = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        summary_out = json.loads(
+            (out_dir / "qc_summary.json").read_text(encoding="utf-8")
+        )
         assert summary_out["overall_pass"] is False
-        comms_check = next(check for check in summary_out["checks"] if check["name"] == "comms")
+        comms_check = next(
+            check for check in summary_out["checks"] if check["name"] == "comms"
+        )
         assert comms_check["passed"] is False
         assert "NLQ" in comms_check["detail"]
 
@@ -978,7 +1046,9 @@ def test_validate_strict_fails_on_nlq_parse_rate(tmp_path: Path) -> None:
             "queries_total": 100,
             "queries_parsed": 93,
         }
-        parse_summary_path.write_text(json.dumps(parse_summary, indent=2), encoding="utf-8")
+        parse_summary_path.write_text(
+            json.dumps(parse_summary, indent=2), encoding="utf-8"
+        )
         out_dir = Path("reports") / "neobank" / "qc"
         result = runner.invoke(
             app,
@@ -994,9 +1064,13 @@ def test_validate_strict_fails_on_nlq_parse_rate(tmp_path: Path) -> None:
             ],
         )
         assert result.exit_code == 1
-        summary_out = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        summary_out = json.loads(
+            (out_dir / "qc_summary.json").read_text(encoding="utf-8")
+        )
         assert summary_out["overall_pass"] is False
-        comms_check = next(check for check in summary_out["checks"] if check["name"] == "comms")
+        comms_check = next(
+            check for check in summary_out["checks"] if check["name"] == "comms"
+        )
         assert comms_check["passed"] is False
         assert "parse" in comms_check["detail"].lower()
 
@@ -1016,7 +1090,9 @@ def test_quickstart_generates_reports(tmp_path: Path) -> None:
             assert (Path("comms") / archetype / "slack_messages.parquet").exists()
             report_dir = Path("reports") / archetype
             assert (report_dir / "exec_summary.json").exists()
-            themes = json.loads((report_dir / "themes.json").read_text(encoding="utf-8"))
+            themes = json.loads(
+                (report_dir / "themes.json").read_text(encoding="utf-8")
+            )
             assert themes["themes"]
 
 

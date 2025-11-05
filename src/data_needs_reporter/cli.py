@@ -56,7 +56,10 @@ def _version_callback(ctx: typer.Context, value: Optional[bool]) -> Optional[boo
 
 def _detect_archetype_from_path(warehouse: Path, config: AppConfig) -> str:
     candidate_files = {
-        "neobank": ["fact_card_transaction.parquet", "fact_subscription_invoice.parquet"],
+        "neobank": [
+            "fact_card_transaction.parquet",
+            "fact_subscription_invoice.parquet",
+        ],
         "marketplace": ["fact_order.parquet", "fact_payment.parquet"],
     }
     candidates = [arch.lower() for arch in config.warehouse.archetypes]
@@ -616,9 +619,7 @@ def _run_checks(warehouse: Path, comms: Path, strict: bool) -> dict[str, object]
             "name": "volume",
             "passed": (not fail_marker) and volume_result["passed"],
             "detail": (
-                "Failure marker detected."
-                if fail_marker
-                else volume_result["detail"]
+                "Failure marker detected." if fail_marker else volume_result["detail"]
             ),
         },
         {
@@ -733,7 +734,6 @@ def eval_labels_cmd(
         raise typer.Exit(code=1)
 
 
-
 @app.command("quickstart")
 def quickstart_cmd(
     ctx: typer.Context,
@@ -781,7 +781,11 @@ def quickstart_cmd(
         customers = pl.DataFrame(
             {
                 "customer_id": [1, 2, 3],
-                "created_at": [base_time, base_time + timedelta(days=1), base_time + timedelta(days=2)],
+                "created_at": [
+                    base_time,
+                    base_time + timedelta(days=1),
+                    base_time + timedelta(days=2),
+                ],
                 "kyc_status": ["verified", "pending", "verified"],
             }
         )
@@ -799,7 +803,10 @@ def quickstart_cmd(
                 "card_id": [1, 2],
                 "account_id": [1, 2],
                 "status": ["active", "active"],
-                "activated_at": [base_time + timedelta(days=1), base_time + timedelta(days=2)],
+                "activated_at": [
+                    base_time + timedelta(days=1),
+                    base_time + timedelta(days=2),
+                ],
             }
         )
         merchants = pl.DataFrame(
@@ -830,7 +837,12 @@ def quickstart_cmd(
                 ],
                 "amount_cents": [12000, 8500, 6400, 7200],
                 "interchange_bps": [120.0, 95.5, 110.2, 130.4],
-                "channel": ["card_present", "card_not_present", "digital_wallet", "card_present"],
+                "channel": [
+                    "card_present",
+                    "card_not_present",
+                    "digital_wallet",
+                    "card_present",
+                ],
                 "auth_result": ["captured", "captured", "captured", "captured"],
                 "loaded_at": [
                     base_time + timedelta(hours=2, minutes=15),
@@ -846,10 +858,19 @@ def quickstart_cmd(
                 "customer_id": [1, 2],
                 "plan_id": [2, 2],
                 "period_start": [base_time, base_time + timedelta(days=30)],
-                "period_end": [base_time + timedelta(days=30), base_time + timedelta(days=60)],
-                "paid_at": [base_time + timedelta(days=30, hours=5), base_time + timedelta(days=60, hours=3)],
+                "period_end": [
+                    base_time + timedelta(days=30),
+                    base_time + timedelta(days=60),
+                ],
+                "paid_at": [
+                    base_time + timedelta(days=30, hours=5),
+                    base_time + timedelta(days=60, hours=3),
+                ],
                 "amount_cents": [999, 999],
-                "loaded_at": [base_time + timedelta(days=30, hours=5), base_time + timedelta(days=60, hours=3)],
+                "loaded_at": [
+                    base_time + timedelta(days=30, hours=5),
+                    base_time + timedelta(days=60, hours=3),
+                ],
             }
         )
 
@@ -869,14 +890,21 @@ def quickstart_cmd(
         buyers = pl.DataFrame(
             {
                 "buyer_id": [1, 2, 3],
-                "created_at": [base_time, base_time + timedelta(days=2), base_time + timedelta(days=4)],
+                "created_at": [
+                    base_time,
+                    base_time + timedelta(days=2),
+                    base_time + timedelta(days=4),
+                ],
                 "country": ["US", "CA", "GB"],
             }
         )
         sellers = pl.DataFrame(
             {
                 "seller_id": [1, 2],
-                "created_at": [base_time - timedelta(days=10), base_time - timedelta(days=5)],
+                "created_at": [
+                    base_time - timedelta(days=10),
+                    base_time - timedelta(days=5),
+                ],
                 "country": ["US", "DE"],
                 "shop_status": ["active", "active"],
             }
@@ -893,7 +921,11 @@ def quickstart_cmd(
                 "listing_id": [1, 2, 3],
                 "seller_id": [1, 1, 2],
                 "category_id": [1, 2, 3],
-                "created_at": [base_time, base_time + timedelta(days=1), base_time + timedelta(days=3)],
+                "created_at": [
+                    base_time,
+                    base_time + timedelta(days=1),
+                    base_time + timedelta(days=3),
+                ],
                 "status": ["active", "active", "active"],
                 "price_cents": [4500, 3200, 7800],
             }
@@ -902,13 +934,19 @@ def quickstart_cmd(
             {
                 "order_id": [1, 2],
                 "buyer_id": [1, 2],
-                "order_time": [base_time + timedelta(hours=9), base_time + timedelta(days=1, hours=11)],
+                "order_time": [
+                    base_time + timedelta(hours=9),
+                    base_time + timedelta(days=1, hours=11),
+                ],
                 "currency": ["USD", "USD"],
                 "subtotal_cents": [8800, 7800],
                 "tax_cents": [700, 620],
                 "shipping_cents": [500, 400],
                 "discount_cents": [0, 200],
-                "loaded_at": [base_time + timedelta(hours=9, minutes=20), base_time + timedelta(days=1, hours=11, minutes=30)],
+                "loaded_at": [
+                    base_time + timedelta(hours=9, minutes=20),
+                    base_time + timedelta(days=1, hours=11, minutes=30),
+                ],
             }
         )
         order_items = pl.DataFrame(
@@ -919,17 +957,27 @@ def quickstart_cmd(
                 "seller_id": [1, 1, 2],
                 "qty": [1, 1, 1],
                 "item_price_cents": [4500, 4300, 7800],
-                "loaded_at": [base_time + timedelta(hours=9, minutes=25), base_time + timedelta(hours=9, minutes=25), base_time + timedelta(days=1, hours=11, minutes=35)],
+                "loaded_at": [
+                    base_time + timedelta(hours=9, minutes=25),
+                    base_time + timedelta(hours=9, minutes=25),
+                    base_time + timedelta(days=1, hours=11, minutes=35),
+                ],
             }
         )
         payments = pl.DataFrame(
             {
                 "order_id": [1, 2],
-                "captured_at": [base_time + timedelta(hours=9, minutes=40), base_time + timedelta(days=1, hours=11, minutes=45)],
+                "captured_at": [
+                    base_time + timedelta(hours=9, minutes=40),
+                    base_time + timedelta(days=1, hours=11, minutes=45),
+                ],
                 "buyer_paid_cents": [10000, 9600],
                 "seller_earnings_cents": [9200, 8700],
                 "platform_fee_cents": [800, 900],
-                "loaded_at": [base_time + timedelta(hours=9, minutes=40), base_time + timedelta(days=1, hours=11, minutes=45)],
+                "loaded_at": [
+                    base_time + timedelta(hours=9, minutes=40),
+                    base_time + timedelta(days=1, hours=11, minutes=45),
+                ],
             }
         )
         snapshots = pl.DataFrame(
@@ -967,9 +1015,19 @@ def quickstart_cmd(
                 "message_id": [1, 2, 3, 4],
                 "thread_id": [1, 1, 2, 2],
                 "user_id": [10, 11, 12, 13],
-                "sent_at": [start, start + timedelta(minutes=5), start + timedelta(days=1), start + timedelta(days=1, minutes=7)],
+                "sent_at": [
+                    start,
+                    start + timedelta(minutes=5),
+                    start + timedelta(days=1),
+                    start + timedelta(days=1, minutes=7),
+                ],
                 "channel": ["support", "support", "exec", "exec"],
-                "bucket": ["data_quality", "governance", "pipeline_health", "data_quality"],
+                "bucket": [
+                    "data_quality",
+                    "governance",
+                    "pipeline_health",
+                    "data_quality",
+                ],
                 "body": [
                     "Need updated retention dashboard numbers.",
                     "Adding governance checklist for rollout.",
@@ -999,7 +1057,10 @@ def quickstart_cmd(
                     "Weekly data quality theme review attached.",
                     "Sharing executive summary draft for feedback.",
                 ],
-                "sent_at": [start + timedelta(hours=2), start + timedelta(days=1, hours=1)],
+                "sent_at": [
+                    start + timedelta(hours=2),
+                    start + timedelta(days=1, hours=1),
+                ],
                 "bucket": ["data_quality", "governance"],
                 "tokens": [120, 95],
                 "link_domains": pl.Series([["looker"], []], dtype=pl.List(pl.Utf8)),
@@ -1013,7 +1074,10 @@ def quickstart_cmd(
             {
                 "query_id": [1, 2],
                 "user_id": [41, 42],
-                "submitted_at": [start + timedelta(hours=3), start + timedelta(days=1, hours=2)],
+                "submitted_at": [
+                    start + timedelta(hours=3),
+                    start + timedelta(days=1, hours=2),
+                ],
                 "text": [
                     "How many new customers joined last week?",
                     "Revenue impact of pipeline delays?",
@@ -1038,8 +1102,26 @@ def quickstart_cmd(
         users_df = pl.DataFrame(
             {
                 "user_id": [10, 11, 12, 13, 21, 22, 41, 42],
-                "role": ["analyst", "pm", "engineer", "exec", "pm", "exec", "analyst", "pm"],
-                "department": ["analytics", "product", "engineering", "executive", "product", "executive", "analytics", "product"],
+                "role": [
+                    "analyst",
+                    "pm",
+                    "engineer",
+                    "exec",
+                    "pm",
+                    "exec",
+                    "analyst",
+                    "pm",
+                ],
+                "department": [
+                    "analytics",
+                    "product",
+                    "engineering",
+                    "executive",
+                    "product",
+                    "executive",
+                    "analytics",
+                    "product",
+                ],
                 "time_zone": ["UTC"] * 8,
                 "active": [True] * 8,
             }
@@ -1047,8 +1129,12 @@ def quickstart_cmd(
         users_df.write_parquet(out_dir / "comms_users.parquet")
 
         hashes = {
-            "slack_messages.parquet": compute_file_hash(out_dir / "slack_messages.parquet"),
-            "email_messages.parquet": compute_file_hash(out_dir / "email_messages.parquet"),
+            "slack_messages.parquet": compute_file_hash(
+                out_dir / "slack_messages.parquet"
+            ),
+            "email_messages.parquet": compute_file_hash(
+                out_dir / "email_messages.parquet"
+            ),
             "nlq.parquet": compute_file_hash(out_dir / "nlq.parquet"),
             "comms_users.parquet": compute_file_hash(out_dir / "comms_users.parquet"),
         }
@@ -1070,9 +1156,21 @@ def quickstart_cmd(
             "nlq": {"overall": coverage_entry, "per_bucket": {}},
         }
         quotas = {
-            "slack": {"total": slack_threads, "day_bucket": {}, "bucket_totals": {"data_quality": slack_threads}},
-            "email": {"total": email_threads, "day_bucket": {}, "bucket_totals": {"data_quality": email_threads}},
-            "nlq": {"total": nlq_count, "day_bucket": {}, "bucket_totals": {"data_gap": nlq_count}},
+            "slack": {
+                "total": slack_threads,
+                "day_bucket": {},
+                "bucket_totals": {"data_quality": slack_threads},
+            },
+            "email": {
+                "total": email_threads,
+                "day_bucket": {},
+                "bucket_totals": {"data_quality": email_threads},
+            },
+            "nlq": {
+                "total": nlq_count,
+                "day_bucket": {},
+                "bucket_totals": {"data_gap": nlq_count},
+            },
         }
 
         budget = {
@@ -1092,7 +1190,9 @@ def quickstart_cmd(
             "hashes": {"algorithm": "sha256", "files": hashes},
             "seeds": {"comms": config.comms.seed, "warehouse": config.warehouse.seed},
         }
-        (out_dir / "budget.json").write_text(json.dumps(budget, indent=2), encoding="utf-8")
+        (out_dir / "budget.json").write_text(
+            json.dumps(budget, indent=2), encoding="utf-8"
+        )
 
     for archetype in ("neobank", "marketplace"):
         warehouse_dir = Path(config.paths.data) / archetype

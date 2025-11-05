@@ -323,7 +323,10 @@ def test_comms_filters_link_domains(
         assert any("[blocked-link]" in body for body in bodies)
 
     combined_domains = {
-        dom for df in (slack, email) for row in df["link_domains"].to_list() for dom in row
+        dom
+        for df in (slack, email)
+        for row in df["link_domains"].to_list()
+        for dom in row
     }
     assert "looker" in combined_domains
 
