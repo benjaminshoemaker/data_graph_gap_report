@@ -3,10 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from data_needs_reporter.report.entities import (
-    EntityExtractionConfig,
-    extract_entities,
-)
+from data_needs_reporter.report.entities import EntityExtractionConfig, extract_entities
 from data_needs_reporter.report.llm import LLMClient
 
 try:  # pragma: no cover - optional dependency

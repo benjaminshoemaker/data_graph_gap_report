@@ -1,10 +1,10 @@
-import math
 import json
+import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 import polars as pl
+import pytest
 
 from data_needs_reporter.config import DEFAULT_CONFIG_PATH, load_config
 from data_needs_reporter.generate.defects import apply_typical_neobank_defects
@@ -15,24 +15,24 @@ from data_needs_reporter.generate.warehouse import (
 from data_needs_reporter.report.metrics import (
     compute_data_health,
     detect_null_spikes,
-    validate_taxonomy_targets,
     validate_monetization_targets,
+    validate_taxonomy_targets,
     validate_theme_mix_targets,
 )
+from data_needs_reporter.report.run import select_top_actions
 from data_needs_reporter.report.scoring import (
     compute_confidence,
+    compute_marketplace_revenue_risk,
+    compute_neobank_revenue_risk,
     compute_score,
     compute_severity,
-    compute_neobank_revenue_risk,
-    compute_marketplace_revenue_risk,
+    compute_weighted_theme_shares,
     normalize_revenue,
-    trailing_monthly_revenue_median,
+    post_stratified_item_weights,
     recency_decay,
     reweight_source_weights,
-    compute_weighted_theme_shares,
-    post_stratified_item_weights,
+    trailing_monthly_revenue_median,
 )
-from data_needs_reporter.report.run import select_top_actions
 
 
 def _write_marketplace_taxonomy_fixture(base_path: Path, gmv_values: list[int]) -> None:

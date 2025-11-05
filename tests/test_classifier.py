@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from data_needs_reporter.cli import app
 from data_needs_reporter.config import DEFAULT_CONFIG_PATH, load_config
 from data_needs_reporter.generate.comms import generate_comms
 from data_needs_reporter.report.classify import (
@@ -17,8 +16,8 @@ from data_needs_reporter.report.classify import (
 )
 from data_needs_reporter.report.entities import EntityExtractionConfig
 from data_needs_reporter.report.llm import LLMError, MockProvider, RepairingLLMClient
-from data_needs_reporter.report.run import run_entity_extraction_for_archetype
 from data_needs_reporter.report.prefilter import prefilter_messages
+from data_needs_reporter.report.run import run_entity_extraction_for_archetype
 from data_needs_reporter.utils.cost_guard import CostGuard
 
 
@@ -527,4 +526,3 @@ def test_classify_threads_parse_error_limit(
 
 
 runner = CliRunner()
-

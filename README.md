@@ -36,6 +36,15 @@ Use `--no-llm` to skip LLM calls and `--fast` to run with evaluation-scale volum
 
 Artifacts land under `reports/` with an index at `reports/index.md` linking to each archetype.
 
+## Performance Targets
+
+Local smoke budgets (Apple M2, Poetry install, `polars` available):
+
+- `dnr gen-warehouse --archetype neobank --out data/neobank --dry-run` ≤ 3.0s
+- `dnr gen-comms --archetype neobank --out comms/neobank` ≤ 3.5s
+- `dnr run-report --warehouse data/neobank --comms comms/neobank --out reports/neobank` ≤ 2.5s
+- `dnr validate --warehouse data/neobank --comms comms/neobank --out reports/neobank/qc --strict` ≤ 2.0s
+
 ## Core Commands
 
 ```bash

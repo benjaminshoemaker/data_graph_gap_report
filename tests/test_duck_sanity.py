@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from data_needs_reporter.config import AppConfig, DEFAULT_CONFIG_PATH, load_config
+from data_needs_reporter.config import DEFAULT_CONFIG_PATH, AppConfig, load_config
 from data_needs_reporter.generate.warehouse import (
     generate_marketplace_dims,
     generate_marketplace_facts,

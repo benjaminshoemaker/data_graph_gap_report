@@ -1063,7 +1063,7 @@ def validate_comms_targets(comms_path: Path) -> Dict[str, object]:
                 bucket_counts[str(bucket)] = bucket_counts.get(str(bucket), 0) + int(count)
 
         if filename == "slack_messages.parquet" and "is_exec" in data.columns:
-            exec_count = data.filter(polars.col("is_exec") == True).height
+            exec_count = data.filter(polars.col("is_exec")).height
         if filename == "nlq.parquet":
             if "tokens" not in data.columns:
                 issues.append("NLQ tokens column missing; cannot evaluate cap.")
