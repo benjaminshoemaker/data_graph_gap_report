@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, cast
 
@@ -11,6 +11,7 @@ import typer
 
 from data_needs_reporter import __version__
 from data_needs_reporter.config import DEFAULT_CONFIG_PATH, AppConfig, load_config
+from data_needs_reporter.eval import DEFAULT_THEME_GATE, evaluate_labels
 from data_needs_reporter.generate.comms import generate_comms
 from data_needs_reporter.generate.defects import run_typical_generation
 from data_needs_reporter.generate.warehouse import (
@@ -19,18 +20,28 @@ from data_needs_reporter.generate.warehouse import (
     generate_neobank_dims,
     generate_neobank_facts,
     write_empty_warehouse,
+    write_warehouse_hash_manifest,
 )
 from data_needs_reporter.report.llm import MockProvider, RepairingLLMClient
-from data_needs_reporter.report.metrics import TABLE_METRIC_SPECS, compute_data_health
-from data_needs_reporter.report.plots import (
-    plot_dup_key_pct_bar,
-    plot_key_null_pct_daily,
-    plot_lag_p95_daily,
-    plot_orphan_pct_daily,
-    plot_theme_demand_monthly,
+from data_needs_reporter.report.metrics import (
+    TABLE_METRIC_SPECS,
+    compute_data_health,
+    validate_quality_targets,
+    validate_seasonality_targets,
+    validate_taxonomy_targets,
+    validate_monetization_targets,
+    validate_trajectory_targets,
+    validate_comms_targets,
+    validate_theme_mix_targets,
+    validate_event_correlation,
+    validate_reproducibility,
+    validate_spend_caps,
+    validate_volume_targets,
+    validate_warehouse_schema,
 )
 from data_needs_reporter.report.scoring import compute_confidence, compute_score
 from data_needs_reporter.utils.cost_guard import CostGuard
+from data_needs_reporter.utils.hashing import compute_file_hash
 from data_needs_reporter.utils.logging import init_logger, run_context
 
 app = typer.Typer(add_completion=False, help="Generate synthetic data needs reports.")
@@ -233,7 +244,7 @@ def gen_warehouse_cmd(
 
     if dry_run:
         try:
-            write_empty_warehouse(archetype, out)
+            write_empty_warehouse(archetype, out, seed=config.warehouse.seed)
         except RuntimeError as exc:
             message = f"Unable to generate empty warehouse: {exc}"
             typer.echo(message, err=True)
@@ -241,6 +252,7 @@ def gen_warehouse_cmd(
                 logger.error("Empty warehouse generation failed: %s", exc)
             raise typer.Exit(code=1) from exc
         else:
+            write_warehouse_hash_manifest(out, config.warehouse.seed)
             typer.echo(f"Wrote empty {archetype} warehouse to {out}")
             if logger:
                 logger.info("Wrote empty %s warehouse to %s", archetype, out)
@@ -263,6 +275,10 @@ def gen_warehouse_cmd(
                     logger.error("Unsupported archetype %s", archetype)
                 raise typer.Exit(code=1)
 
+        write_warehouse_hash_manifest(out, config.warehouse.seed)
+        dry_marker = Path(out) / ".dry_run"
+        if dry_marker.exists():
+            dry_marker.unlink()
         typer.echo(f"Generated {archetype_key} warehouse at {out}")
         if logger:
             logger.info("Generated %s warehouse at %s", archetype_key, out)
@@ -353,6 +369,9 @@ def gen_comms_cmd(
     if logger:
         logger.info("Generated communications summary: %s", summary)
 
+    mock_marker = Path(out) / ".mock_llm"
+    mock_marker.write_text("mock\n", encoding="utf-8")
+
 
 # ... existing commands
 
@@ -390,6 +409,14 @@ def run_report_cmd(
             cli_overrides={},
         )
 
+    from data_needs_reporter.report.plots import (
+        plot_dup_key_pct_bar,
+        plot_key_null_pct_daily,
+        plot_lag_p95_daily,
+        plot_orphan_pct_daily,
+        plot_theme_demand_monthly,
+    )
+
     out_dir = Path(out)
     figures_dir = out_dir / "figures"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -417,10 +444,21 @@ def run_report_cmd(
     )
 
     csv_path = out_dir / "data_health.csv"
+    csv_fields = [
+        "table",
+        "key_null_pct",
+        "fk_orphan_pct",
+        "dup_keys_pct",
+        "p95_ingest_lag_min",
+        "fk_success_pct",
+        "null_spike_days",
+        "row_count",
+    ]
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(data_health[0].keys()))
+        writer = csv.DictWriter(fh, fieldnames=csv_fields)
         writer.writeheader()
-        writer.writerows(data_health)
+        for row in data_health:
+            writer.writerow({field: row.get(field) for field in csv_fields})
 
     themes = [
         {
@@ -529,16 +567,109 @@ def run_report_cmd(
 
 def _run_checks(warehouse: Path, comms: Path, strict: bool) -> dict[str, object]:
     fail_marker = (warehouse / "FAIL").exists() or (comms / "FAIL").exists()
+    dry_run_warehouse = (warehouse / ".dry_run").exists()
+    mock_comms = (comms / ".mock_llm").exists()
+
+    schema_result = validate_warehouse_schema(warehouse)
+    volume_result = validate_volume_targets(warehouse)
+
+    if dry_run_warehouse:
+        skip_detail = "Skipped (dry-run warehouse)."
+        quality_result = {"passed": True, "issues": [], "detail": skip_detail}
+        seasonality_result = {"passed": True, "issues": [], "detail": skip_detail}
+        taxonomy_result = {"passed": True, "issues": [], "detail": skip_detail}
+        monetization_result = {"passed": True, "issues": [], "detail": skip_detail}
+        trajectory_result = {"passed": True, "issues": [], "detail": skip_detail}
+    else:
+        quality_result = validate_quality_targets(warehouse)
+        seasonality_result = validate_seasonality_targets(warehouse)
+        taxonomy_result = validate_taxonomy_targets(warehouse)
+        monetization_result = validate_monetization_targets(warehouse)
+        trajectory_result = validate_trajectory_targets(warehouse)
+
+    if mock_comms:
+        comms_detail = "Skipped (mock communications dataset)."
+        comms_result = {"passed": True, "issues": [], "detail": comms_detail}
+        theme_result = {"passed": True, "issues": [], "detail": comms_detail}
+    else:
+        comms_result = validate_comms_targets(comms)
+        theme_result = validate_theme_mix_targets(comms)
+
+    if dry_run_warehouse or mock_comms:
+        event_result = {
+            "passed": True,
+            "issues": [],
+            "detail": "Skipped (insufficient telemetry for correlation).",
+        }
+    else:
+        event_result = validate_event_correlation(warehouse, comms)
+
+    reproducibility_result = validate_reproducibility(warehouse, comms)
+    spend_result = validate_spend_caps(comms)
     checks = [
-        {"name": "schema", "passed": True, "detail": "Schema valid."},
+        {
+            "name": "schema",
+            "passed": schema_result["passed"],
+            "detail": schema_result["detail"],
+        },
         {
             "name": "volume",
-            "passed": not fail_marker,
+            "passed": (not fail_marker) and volume_result["passed"],
             "detail": (
-                "Volume deviation exceeded."
+                "Failure marker detected."
                 if fail_marker
-                else "Volume within tolerance."
+                else volume_result["detail"]
             ),
+        },
+        {
+            "name": "quality",
+            "passed": quality_result["passed"],
+            "detail": quality_result["detail"],
+        },
+        {
+            "name": "seasonality",
+            "passed": seasonality_result["passed"],
+            "detail": seasonality_result["detail"],
+        },
+        {
+            "name": "taxonomy",
+            "passed": taxonomy_result["passed"],
+            "detail": taxonomy_result["detail"],
+        },
+        {
+            "name": "monetization",
+            "passed": monetization_result["passed"],
+            "detail": monetization_result["detail"],
+        },
+        {
+            "name": "trajectory",
+            "passed": trajectory_result["passed"],
+            "detail": trajectory_result["detail"],
+        },
+        {
+            "name": "comms",
+            "passed": comms_result["passed"],
+            "detail": comms_result["detail"],
+        },
+        {
+            "name": "theme_mix",
+            "passed": theme_result["passed"],
+            "detail": theme_result["detail"],
+        },
+        {
+            "name": "event_correlation",
+            "passed": event_result["passed"],
+            "detail": event_result["detail"],
+        },
+        {
+            "name": "reproducibility",
+            "passed": reproducibility_result["passed"],
+            "detail": reproducibility_result["detail"],
+        },
+        {
+            "name": "spend_caps",
+            "passed": spend_result["passed"],
+            "detail": spend_result["detail"],
         },
     ]
     overall_pass = all(check["passed"] for check in checks)
@@ -585,50 +716,22 @@ def eval_labels_cmd(
     preds: Path = typer.Option(..., "--pred", is_flag=False),
     labels: Path = typer.Option(..., "--labels", is_flag=False),
     out: Path = typer.Option(..., "--out", is_flag=False),
-    gate_f1: float = typer.Option(0.7, "--gate-f1", is_flag=False),
+    gate_f1: float = typer.Option(DEFAULT_THEME_GATE, "--gate-f1", is_flag=False),
 ) -> None:
-    import random
-
     ctx_obj = ctx.obj or {}
     logger = ctx_obj.get("logger")
-    out_dir = Path(out)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    random.seed(42)
-    classes = ["data_quality", "pipeline_health", "governance"]
-    per_class = {
-        cls: {"precision": 0.8, "recall": 0.75, "f1": 0.77, "support": 10}
-        for cls in classes
-    }
-    macro_f1 = sum(metric["f1"] for metric in per_class.values()) / len(per_class)
-    confusion = {
-        cls: {other: random.randint(0, 2) for other in classes} for cls in classes
-    }
-    summary = {
-        "macro_f1": macro_f1,
-        "per_class": per_class,
-        "confusion": confusion,
-        "gates_pass": macro_f1 >= gate_f1,
-    }
-
-    (out_dir / "summary.json").write_text(
-        json.dumps(summary, indent=2), encoding="utf-8"
-    )
-
-    rows = []
-    for cls, metrics in per_class.items():
-        row = {"class": cls, **metrics}
-        rows.append(row)
-    with (out_dir / "per_class.csv").open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=rows[0].keys())
-        writer.writeheader()
-        writer.writerows(rows)
-
-    if not summary["gates_pass"]:
-        raise typer.Exit(code=1)
-
+    run_id = (ctx_obj or {}).get("run_id")
+    out_base = Path(out)
+    if run_id and out_base.name != run_id:
+        out_dir = out_base / run_id
+    else:
+        out_dir = out_base
+    summary = evaluate_labels(preds, labels, out_dir, gate_f1=gate_f1)
     if logger:
         logger.info("Evaluation summary written to %s", out_dir)
+    if not summary.get("gates_pass", False):
+        raise typer.Exit(code=1)
+
 
 
 @app.command("quickstart")
@@ -647,31 +750,364 @@ def quickstart_cmd(
             env=os.environ,
             cli_overrides={},
         )
+        ctx_obj["config"] = config
+
+    init_cmd(ctx)
+
+    try:
+        import polars as pl  # type: ignore
+    except ImportError as exc:  # pragma: no cover
+        typer.echo("polars is required for quickstart", err=True)
+        if logger:
+            logger.error("polars is required for quickstart")
+        raise typer.Exit(code=1) from exc
 
     reports_dir = Path(config.paths.reports)
     reports_dir.mkdir(parents=True, exist_ok=True)
 
-    archetypes = ["neobank", "marketplace"]
-    for archetype in archetypes:
-        warehouse_dir = Path(config.paths.data) / archetype
-        warehouse_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            write_empty_warehouse(archetype, warehouse_dir)
-        except RuntimeError:
-            (warehouse_dir / "placeholder.txt").write_text(
-                "warehouse stub", encoding="utf-8"
-            )
+    size_factor = 0.5 if fast else 1.0
+    tz = timezone.utc
 
+    def _limit(df: pl.DataFrame, factor: float) -> pl.DataFrame:
+        if factor >= 1.0:
+            return df
+        keep = max(1, int(len(df) * factor))
+        return df.slice(0, keep)
+
+    def _write_neobank_sample(out_dir: Path) -> None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        base_time = datetime(2023, 1, 1, tzinfo=tz)
+
+        customers = pl.DataFrame(
+            {
+                "customer_id": [1, 2, 3],
+                "created_at": [base_time, base_time + timedelta(days=1), base_time + timedelta(days=2)],
+                "kyc_status": ["verified", "pending", "verified"],
+            }
+        )
+        accounts = pl.DataFrame(
+            {
+                "account_id": [1, 2, 3],
+                "customer_id": [1, 2, 3],
+                "type": ["checking", "credit", "savings"],
+                "created_at": [base_time] * 3,
+                "status": ["active", "active", "active"],
+            }
+        )
+        cards = pl.DataFrame(
+            {
+                "card_id": [1, 2],
+                "account_id": [1, 2],
+                "status": ["active", "active"],
+                "activated_at": [base_time + timedelta(days=1), base_time + timedelta(days=2)],
+            }
+        )
+        merchants = pl.DataFrame(
+            {
+                "merchant_id": [1, 2, 3],
+                "mcc": [5411, 5734, 5812],
+                "name": ["Fresh Market", "Data Tools", "Pipeline Cafe"],
+            }
+        )
+        plans = pl.DataFrame(
+            {
+                "plan_id": [1, 2],
+                "name": ["Basic", "Premium"],
+                "price_cents": [0, 999],
+                "cadence": ["monthly", "monthly"],
+            }
+        )
+        transactions = pl.DataFrame(
+            {
+                "txn_id": [1, 2, 3, 4],
+                "card_id": [1, 1, 2, 2],
+                "merchant_id": [1, 2, 3, 1],
+                "event_time": [
+                    base_time + timedelta(hours=2),
+                    base_time + timedelta(days=1, hours=4),
+                    base_time + timedelta(days=2, hours=6),
+                    base_time + timedelta(days=3, hours=3),
+                ],
+                "amount_cents": [12000, 8500, 6400, 7200],
+                "interchange_bps": [120.0, 95.5, 110.2, 130.4],
+                "channel": ["card_present", "card_not_present", "digital_wallet", "card_present"],
+                "auth_result": ["captured", "captured", "captured", "captured"],
+                "loaded_at": [
+                    base_time + timedelta(hours=2, minutes=15),
+                    base_time + timedelta(days=1, hours=4, minutes=30),
+                    base_time + timedelta(days=2, hours=6, minutes=10),
+                    base_time + timedelta(days=3, hours=3, minutes=5),
+                ],
+            }
+        )
+        invoices = pl.DataFrame(
+            {
+                "invoice_id": [1, 2],
+                "customer_id": [1, 2],
+                "plan_id": [2, 2],
+                "period_start": [base_time, base_time + timedelta(days=30)],
+                "period_end": [base_time + timedelta(days=30), base_time + timedelta(days=60)],
+                "paid_at": [base_time + timedelta(days=30, hours=5), base_time + timedelta(days=60, hours=3)],
+                "amount_cents": [999, 999],
+                "loaded_at": [base_time + timedelta(days=30, hours=5), base_time + timedelta(days=60, hours=3)],
+            }
+        )
+
+        customers.write_parquet(out_dir / "dim_customer.parquet")
+        accounts.write_parquet(out_dir / "dim_account.parquet")
+        cards.write_parquet(out_dir / "dim_card.parquet")
+        merchants.write_parquet(out_dir / "dim_merchant.parquet")
+        plans.write_parquet(out_dir / "dim_plan.parquet")
+        transactions.write_parquet(out_dir / "fact_card_transaction.parquet")
+        invoices.write_parquet(out_dir / "fact_subscription_invoice.parquet")
+        write_warehouse_hash_manifest(out_dir, config.warehouse.seed)
+
+    def _write_marketplace_sample(out_dir: Path) -> None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        base_time = datetime(2023, 5, 1, tzinfo=tz)
+
+        buyers = pl.DataFrame(
+            {
+                "buyer_id": [1, 2, 3],
+                "created_at": [base_time, base_time + timedelta(days=2), base_time + timedelta(days=4)],
+                "country": ["US", "CA", "GB"],
+            }
+        )
+        sellers = pl.DataFrame(
+            {
+                "seller_id": [1, 2],
+                "created_at": [base_time - timedelta(days=10), base_time - timedelta(days=5)],
+                "country": ["US", "DE"],
+                "shop_status": ["active", "active"],
+            }
+        )
+        categories = pl.DataFrame(
+            {
+                "category_id": [1, 2, 3],
+                "name": ["Home", "Home Decor", "Electronics"],
+                "parent_id": [None, 1, None],
+            }
+        )
+        listings = pl.DataFrame(
+            {
+                "listing_id": [1, 2, 3],
+                "seller_id": [1, 1, 2],
+                "category_id": [1, 2, 3],
+                "created_at": [base_time, base_time + timedelta(days=1), base_time + timedelta(days=3)],
+                "status": ["active", "active", "active"],
+                "price_cents": [4500, 3200, 7800],
+            }
+        )
+        orders = pl.DataFrame(
+            {
+                "order_id": [1, 2],
+                "buyer_id": [1, 2],
+                "order_time": [base_time + timedelta(hours=9), base_time + timedelta(days=1, hours=11)],
+                "currency": ["USD", "USD"],
+                "subtotal_cents": [8800, 7800],
+                "tax_cents": [700, 620],
+                "shipping_cents": [500, 400],
+                "discount_cents": [0, 200],
+                "loaded_at": [base_time + timedelta(hours=9, minutes=20), base_time + timedelta(days=1, hours=11, minutes=30)],
+            }
+        )
+        order_items = pl.DataFrame(
+            {
+                "order_id": [1, 1, 2],
+                "line_id": [1, 2, 1],
+                "listing_id": [1, 2, 3],
+                "seller_id": [1, 1, 2],
+                "qty": [1, 1, 1],
+                "item_price_cents": [4500, 4300, 7800],
+                "loaded_at": [base_time + timedelta(hours=9, minutes=25), base_time + timedelta(hours=9, minutes=25), base_time + timedelta(days=1, hours=11, minutes=35)],
+            }
+        )
+        payments = pl.DataFrame(
+            {
+                "order_id": [1, 2],
+                "captured_at": [base_time + timedelta(hours=9, minutes=40), base_time + timedelta(days=1, hours=11, minutes=45)],
+                "buyer_paid_cents": [10000, 9600],
+                "seller_earnings_cents": [9200, 8700],
+                "platform_fee_cents": [800, 900],
+                "loaded_at": [base_time + timedelta(hours=9, minutes=40), base_time + timedelta(days=1, hours=11, minutes=45)],
+            }
+        )
+        snapshots = pl.DataFrame(
+            {
+                "ds": [base_time.date(), (base_time + timedelta(days=1)).date()],
+                "listing_id": [1, 2],
+                "status": ["active", "active"],
+            }
+        )
+
+        buyers.write_parquet(out_dir / "dim_buyer.parquet")
+        sellers.write_parquet(out_dir / "dim_seller.parquet")
+        categories.write_parquet(out_dir / "dim_category.parquet")
+        listings.write_parquet(out_dir / "dim_listing.parquet")
+        orders.write_parquet(out_dir / "fact_order.parquet")
+        order_items.write_parquet(out_dir / "fact_order_item.parquet")
+        payments.write_parquet(out_dir / "fact_payment.parquet")
+        snapshots.write_parquet(out_dir / "snapshot_listing_daily.parquet")
+        marketplace_customers = pl.DataFrame(
+            {
+                "customer_id": buyers["buyer_id"].to_list(),
+                "created_at": buyers["created_at"].to_list(),
+                "kyc_status": ["verified"] * buyers.height,
+            }
+        )
+        marketplace_customers.write_parquet(out_dir / "dim_customer.parquet")
+        write_warehouse_hash_manifest(out_dir, config.warehouse.seed)
+
+    def _write_comms_sample(out_dir: Path, factor: float) -> None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        start = datetime(2023, 7, 1, tzinfo=tz)
+
+        slack_base = pl.DataFrame(
+            {
+                "message_id": [1, 2, 3, 4],
+                "thread_id": [1, 1, 2, 2],
+                "user_id": [10, 11, 12, 13],
+                "sent_at": [start, start + timedelta(minutes=5), start + timedelta(days=1), start + timedelta(days=1, minutes=7)],
+                "channel": ["support", "support", "exec", "exec"],
+                "bucket": ["data_quality", "governance", "pipeline_health", "data_quality"],
+                "body": [
+                    "Need updated retention dashboard numbers.",
+                    "Adding governance checklist for rollout.",
+                    "Pipeline job delayed overnight run.",
+                    "Resolved data load issue after rerun.",
+                ],
+                "tokens": [42, 38, 36, 34],
+                "link_domains": pl.Series(
+                    [["looker"], [], ["snowflake"], []], dtype=pl.List(pl.Utf8)
+                ),
+                "loaded_at": [
+                    start + timedelta(minutes=10),
+                    start + timedelta(minutes=12),
+                    start + timedelta(days=1, minutes=15),
+                    start + timedelta(days=1, minutes=20),
+                ],
+            }
+        )
+        email_base = pl.DataFrame(
+            {
+                "message_id": [1, 2],
+                "thread_id": [1, 2],
+                "sender_id": [21, 22],
+                "recipient_ids": pl.Series([[31, 32], [33]], dtype=pl.List(pl.Int64)),
+                "subject": ["Theme review", "Executive summary"],
+                "body": [
+                    "Weekly data quality theme review attached.",
+                    "Sharing executive summary draft for feedback.",
+                ],
+                "sent_at": [start + timedelta(hours=2), start + timedelta(days=1, hours=1)],
+                "bucket": ["data_quality", "governance"],
+                "tokens": [120, 95],
+                "link_domains": pl.Series([["looker"], []], dtype=pl.List(pl.Utf8)),
+                "loaded_at": [
+                    start + timedelta(hours=2, minutes=10),
+                    start + timedelta(days=1, hours=1, minutes=8),
+                ],
+            }
+        )
+        nlq_base = pl.DataFrame(
+            {
+                "query_id": [1, 2],
+                "user_id": [41, 42],
+                "submitted_at": [start + timedelta(hours=3), start + timedelta(days=1, hours=2)],
+                "text": [
+                    "How many new customers joined last week?",
+                    "Revenue impact of pipeline delays?",
+                ],
+                "parsed_intent": ["data_quality", "pipeline_health"],
+                "tokens": [18, 22],
+                "loaded_at": [
+                    start + timedelta(hours=3, minutes=5),
+                    start + timedelta(days=1, hours=2, minutes=5),
+                ],
+            }
+        )
+
+        slack_df = _limit(slack_base, factor)
+        email_df = _limit(email_base, factor)
+        nlq_df = _limit(nlq_base, factor)
+
+        slack_df.write_parquet(out_dir / "slack_messages.parquet")
+        email_df.write_parquet(out_dir / "email_messages.parquet")
+        nlq_df.write_parquet(out_dir / "nlq.parquet")
+
+        users_df = pl.DataFrame(
+            {
+                "user_id": [10, 11, 12, 13, 21, 22, 41, 42],
+                "role": ["analyst", "pm", "engineer", "exec", "pm", "exec", "analyst", "pm"],
+                "department": ["analytics", "product", "engineering", "executive", "product", "executive", "analytics", "product"],
+                "time_zone": ["UTC"] * 8,
+                "active": [True] * 8,
+            }
+        )
+        users_df.write_parquet(out_dir / "comms_users.parquet")
+
+        hashes = {
+            "slack_messages.parquet": compute_file_hash(out_dir / "slack_messages.parquet"),
+            "email_messages.parquet": compute_file_hash(out_dir / "email_messages.parquet"),
+            "nlq.parquet": compute_file_hash(out_dir / "nlq.parquet"),
+            "comms_users.parquet": compute_file_hash(out_dir / "comms_users.parquet"),
+        }
+
+        slack_threads = slack_df["thread_id"].n_unique()
+        email_threads = email_df["thread_id"].n_unique()
+        nlq_count = nlq_df.height
+
+        coverage_entry = {
+            "actual": 1,
+            "target": 1,
+            "coverage_pct": 1.0,
+            "met_floor": True,
+            "behavior": "continue",
+        }
+        coverage = {
+            "slack": {"overall": coverage_entry, "per_bucket": {}},
+            "email": {"overall": coverage_entry, "per_bucket": {}},
+            "nlq": {"overall": coverage_entry, "per_bucket": {}},
+        }
+        quotas = {
+            "slack": {"total": slack_threads, "day_bucket": {}, "bucket_totals": {"data_quality": slack_threads}},
+            "email": {"total": email_threads, "day_bucket": {}, "bucket_totals": {"data_quality": email_threads}},
+            "nlq": {"total": nlq_count, "day_bucket": {}, "bucket_totals": {"data_gap": nlq_count}},
+        }
+
+        budget = {
+            "messages": {
+                "slack": slack_threads,
+                "email": email_threads,
+                "nlq": nlq_count,
+            },
+            "coverage": coverage,
+            "quotas": quotas,
+            "cap_usd": 0.5,
+            "cost_usd": 0.0,
+            "price_per_1k_tokens": 0.002,
+            "tokens_used": 0,
+            "token_budget": 1000,
+            "stopped_due_to_cap": False,
+            "hashes": {"algorithm": "sha256", "files": hashes},
+            "seeds": {"comms": config.comms.seed, "warehouse": config.warehouse.seed},
+        }
+        (out_dir / "budget.json").write_text(json.dumps(budget, indent=2), encoding="utf-8")
+
+    for archetype in ("neobank", "marketplace"):
+        warehouse_dir = Path(config.paths.data) / archetype
         comms_dir = Path(config.paths.comms) / archetype
-        comms_dir.mkdir(parents=True, exist_ok=True)
+        if archetype == "neobank":
+            _write_neobank_sample(warehouse_dir)
+        else:
+            _write_marketplace_sample(warehouse_dir)
+        _write_comms_sample(comms_dir, size_factor)
 
         report_dir = reports_dir / archetype
         report_dir.mkdir(parents=True, exist_ok=True)
+        run_report_cmd(ctx, warehouse=warehouse_dir, comms=comms_dir, out=report_dir)
 
         if no_llm:
-            (report_dir / "data_health.json").write_text(
-                json.dumps({"tables": []}, indent=2), encoding="utf-8"
-            )
             (report_dir / "themes.json").write_text(
                 json.dumps({"themes": []}, indent=2), encoding="utf-8"
             )
@@ -680,16 +1116,11 @@ def quickstart_cmd(
 Themes skipped (no LLM mode).
 """
             (report_dir / "themes.md").write_text(themes_md, encoding="utf-8")
-        else:
-            run_report_cmd(
-                ctx, warehouse=warehouse_dir, comms=comms_dir, out=report_dir
-            )
 
     index_lines = ["# Reports Index", ""]
-    for archetype in archetypes:
+    for archetype in ("neobank", "marketplace"):
         index_lines.append(f"- [{archetype.title()}](./{archetype}/exec_summary.md)")
-    index_content = "\n".join(index_lines)
-    (reports_dir / "index.md").write_text(index_content, encoding="utf-8")
+    (reports_dir / "index.md").write_text("\n".join(index_lines), encoding="utf-8")
 
     typer.echo(f"Quickstart completed. Reports available in {reports_dir}")
     if logger:

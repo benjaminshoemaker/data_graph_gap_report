@@ -43,7 +43,13 @@ def safe_query(
 ) -> pl.DataFrame:
     _guard_sql(sql)
     result = conn.execute(sql, params or ())
-    return result.pl()
+    records = result.fetchall()
+    columns = [desc[0] for desc in result.description] if result.description else None
+    if not records:
+        return pl.DataFrame(schema=columns or [])
+    if columns is None:
+        return pl.DataFrame(records)
+    return pl.DataFrame(records, schema=columns)
 
 
 def _guard_sql(sql: str) -> None:
@@ -123,18 +129,157 @@ _SANITY_SQL: Dict[str, Dict[str, str]] = {
 
 
 def run_warehouse_sanity(archetype: str, parquet_dir: Path) -> Dict[str, pl.DataFrame]:
-    """Attach generated parquet tables and run archetype-specific sanity SQL."""
+    """Compute archetype sanity metrics using in-memory Polars transforms."""
     arch_key = archetype.lower()
-    if arch_key not in _SANITY_SQL:
-        raise ValueError(f"Unsupported archetype for sanity checks: {archetype}")
+    base_path = Path(parquet_dir)
+    if arch_key == "neobank":
+        customers = pl.read_parquet(base_path / "dim_customer.parquet")
+        cards = pl.read_parquet(base_path / "dim_card.parquet")
+        transactions = pl.read_parquet(base_path / "fact_card_transaction.parquet")
 
-    conn = open_db(None)
-    attach_parquet_dir(conn, "warehouse", Path(parquet_dir))
+        customer_counts = pl.DataFrame({"customers": [customers.height]})
+        txn_count = transactions.height
+        total_amount = float(transactions["amount_cents"].sum()) if txn_count else 0.0
+        transaction_volume = pl.DataFrame(
+            {"txn_count": [txn_count], "total_amount": [total_amount]}
+        )
 
-    results: Dict[str, pl.DataFrame] = {}
-    for name, sql in _SANITY_SQL[arch_key].items():
-        results[name] = safe_query(conn, sql)
-    return results
+        if txn_count:
+            min_event = transactions["event_time"].min()
+            max_event = transactions["event_time"].max()
+        else:
+            min_event = None
+            max_event = None
+        transaction_bounds = pl.DataFrame(
+            {"min_event": [min_event], "max_event": [max_event]}
+        )
+
+        joined = transactions.join(
+            cards.select("card_id"), on="card_id", how="inner"
+        ).height
+        txn_join_quality = pl.DataFrame({"joined": [joined]})
+
+        daily_kpi = (
+            transactions.with_columns(
+                [
+                    pl.col("event_time").dt.truncate("1d").alias("ds"),
+                    pl.col("auth_result")
+                    .cast(pl.Utf8)
+                    .str.to_lowercase()
+                    .alias("_auth"),
+                    (
+                        pl.col("amount_cents").cast(pl.Float64)
+                        * pl.col("interchange_bps").cast(pl.Float64)
+                        / 10000.0
+                        / 100.0
+                    ).alias("_interchange_usd"),
+                    (pl.col("amount_cents").cast(pl.Float64) / 100.0).alias(
+                        "_amount_usd"
+                    ),
+                ]
+            )
+            .group_by("ds")
+            .agg(
+                [
+                    pl.when(pl.col("_auth") == "captured")
+                    .then(pl.col("_amount_usd"))
+                    .otherwise(0.0)
+                    .sum()
+                    .alias("captured_usd"),
+                    pl.when(pl.col("_auth") == "captured")
+                    .then(pl.col("_interchange_usd"))
+                    .otherwise(0.0)
+                    .sum()
+                    .alias("interchange_usd"),
+                ]
+            )
+            .select(["ds", "captured_usd", "interchange_usd"])
+            .sort("ds")
+        )
+
+        return {
+            "customer_counts": customer_counts,
+            "transaction_volume": transaction_volume,
+            "transaction_bounds": transaction_bounds,
+            "txn_join_quality": txn_join_quality,
+            "daily_kpi": daily_kpi,
+        }
+
+    if arch_key == "marketplace":
+        orders = pl.read_parquet(base_path / "fact_order.parquet")
+        payments = pl.read_parquet(base_path / "fact_payment.parquet")
+        order_items = pl.read_parquet(base_path / "fact_order_item.parquet")
+
+        order_counts = pl.DataFrame({"orders": [orders.height]})
+
+        payment_join = orders.join(
+            payments.select(["order_id"]),
+            on="order_id",
+            how="inner",
+        ).height
+        order_payment_join = pl.DataFrame({"joined": [payment_join]})
+
+        items_count = order_items.height
+        total_qty = int(order_items["qty"].sum()) if items_count else 0
+        order_item_totals = pl.DataFrame(
+            {"items": [items_count], "total_qty": [total_qty]}
+        )
+
+        if orders.height:
+            min_order = orders["order_time"].min()
+            max_order = orders["order_time"].max()
+        else:
+            min_order = None
+            max_order = None
+        order_bounds = pl.DataFrame({"min_order": [min_order], "max_order": [max_order]})
+
+        orders_with_fee = orders.join(
+            payments.select(["order_id", "platform_fee_cents"]),
+            on="order_id",
+            how="left",
+        ).with_columns(
+            [
+                pl.col("order_time").dt.truncate("1d").alias("ds"),
+                (
+                    pl.col("subtotal_cents")
+                    + pl.col("shipping_cents")
+                    + pl.col("tax_cents")
+                    - pl.col("discount_cents")
+                ).alias("_gmv_cents"),
+            ]
+        )
+
+        daily_agg = (
+            orders_with_fee.group_by("ds")
+            .agg(
+                [
+                    pl.sum("_gmv_cents").alias("_gmv_cents"),
+                    pl.sum("platform_fee_cents").alias("_fee_cents"),
+                    pl.sum("subtotal_cents").alias("_subtotal_cents"),
+                ]
+            )
+            .with_columns(
+                [
+                    (pl.col("_gmv_cents") / 100.0).alias("gmv_usd"),
+                    pl.when(pl.col("_subtotal_cents") == 0)
+                    .then(None)
+                    .otherwise(pl.col("_fee_cents") / pl.col("_subtotal_cents"))
+                    .alias("take_rate"),
+                ]
+            )
+            .select(["ds", "gmv_usd", "take_rate"])
+            .sort("ds")
+        )
+
+        return {
+            "order_counts": order_counts,
+            "order_payment_join": order_payment_join,
+            "order_item_totals": order_item_totals,
+            "order_bounds": order_bounds,
+            "daily_kpi": daily_agg,
+        }
+
+    raise ValueError(f"Unsupported archetype for sanity checks: {archetype}")
 
 
 __all__ = [

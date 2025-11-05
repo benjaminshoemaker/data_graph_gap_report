@@ -93,7 +93,19 @@ class AppConfig(BaseModel):
     cache: CacheConfig
 
 
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "default.yaml"
+def _resolve_default_config_path() -> Path:
+    repo_candidate = Path(__file__).resolve().parents[2] / "configs" / "default.yaml"
+    package_candidate = Path(__file__).resolve().parent / "configs" / "default.yaml"
+    for candidate in (repo_candidate, package_candidate):
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        "Unable to locate default configuration; expected it under "
+        f"{repo_candidate} or {package_candidate}."
+    )
+
+
+DEFAULT_CONFIG_PATH = _resolve_default_config_path()
 ENV_TO_PATH: Dict[str, Tuple[str, ...]] = {
     "LLM_API_CAP_USD": ("classification", "api_cap_usd"),
     "REPORT_WINDOW_DAYS": ("report", "window_days"),

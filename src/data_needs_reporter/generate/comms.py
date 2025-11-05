@@ -12,6 +12,7 @@ from data_needs_reporter.config import AppConfig
 from data_needs_reporter.report.llm import RepairingLLMClient
 from data_needs_reporter.utils.cost_guard import CostGuard
 from data_needs_reporter.utils.io import write_parquet_atomic
+from data_needs_reporter.utils.hashing import compute_file_hash
 
 try:  # pragma: no cover - optional dependency
     import polars as _pl
@@ -33,6 +34,7 @@ ALLOWED_LINK_DOMAINS = {
     "montecarlo",
 }
 BLOCKED_LINK_PLACEHOLDER = "[blocked-link]"
+NLQ_TOKEN_CAP = 30
 
 
 def _ensure_polars():
@@ -223,6 +225,21 @@ def generate_comms(
         quotas,
     )
 
+    files_to_hash = {
+        "slack_messages.parquet": out_path / "slack_messages.parquet",
+        "email_messages.parquet": out_path / "email_messages.parquet",
+        "nlq.parquet": out_path / "nlq.parquet",
+        "comms_users.parquet": out_path / "comms_users.parquet",
+    }
+    hashed_files = {
+        name: compute_file_hash(path)
+        for name, path in files_to_hash.items()
+        if path.exists()
+    }
+    seed_info: Dict[str, object] = {"comms": cfg.comms.seed}
+    if hasattr(cfg, "warehouse") and getattr(cfg.warehouse, "seed", None) is not None:
+        seed_info["warehouse"] = cfg.warehouse.seed
+
     guard.write_budget(
         out_path / "budget.json",
         extra={
@@ -245,6 +262,8 @@ def generate_comms(
             },
             "coverage": coverage,
             "quotas": quotas,
+            "hashes": {"algorithm": "sha256", "files": hashed_files},
+            "seeds": seed_info,
         },
     )
     return summary
@@ -503,6 +522,9 @@ def _generate_nlq_queries(
         text = content.get("text", "How many active subscribers churned this month?")
         intent = content.get("parsed_intent", "data_gap")
         tokens = int(content.get("tokens", max(15, len(text) // 4)))
+        if tokens <= 0:
+            tokens = max(1, len(text) // 4 or 1)
+        tokens = min(tokens, NLQ_TOKEN_CAP)
         if not guard.record_message("nlq", tokens):
             break
         tokens_used += tokens

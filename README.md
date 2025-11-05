@@ -4,15 +4,24 @@ Command-line toolbox that generates synthetic warehouse activity, communications
 
 ## Installation
 
+Install from PyPI:
+
 ```bash
-poetry install
-poetry run dnr --help
+pip install data-needs-reporter
+dnr --help
 ```
 
-For isolated usage:
+Run ad-hoc without polluting your environment:
 
 ```bash
 pipx run data-needs-reporter -- --version
+```
+
+For local development work:
+
+```bash
+poetry install
+poetry run dnr --help
 ```
 
 ## Quickstart
