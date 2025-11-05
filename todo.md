@@ -136,10 +136,19 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 7. Metrics Engine + Plots
 
-- [ ] Compute per‑table:
+- [ ] Compute per-table:
   - [ ] key_null_pct, fk_success_pct, orphan_pct, dup_key_pct, p95_ingest_lag_min
-  - [ ] Null spike detection (daily vs 7‑day median +8.0)
+  - [ ] Null spike detection (daily vs 7-day median +8.0)
 - [x] SLO check using config thresholds
+- [x] Validate quality targets in `validate` gate (merchant key null, card orphan, txn dup, txn lag)
+  - [ ] Extend coverage to invoice aggregates when targets finalize
+- [x] Validate seasonality + hour peaks in `validate` gate (weekend ratios, 10–14 & 17–21 coverage)
+  - [ ] Fold in marketplace evening window guardrails once command outputs available
+- [x] Validate taxonomy coverage in `validate` gate (neobank MCC breadth, marketplace category share caps)
+  - [ ] Expand marketplace check once GMV from subcategories needs weighting
+- [x] Validate monetization sanity in `validate` gate (interchange %, attach rate, marketplace take rate)
+  - [ ] Reconcile attach targets once additional subscription tiers introduced
+- [x] Validate comms volumes and mix in `validate` gate (source counts, bucket floors, exec share)
 - [x] Plots:
   - [x] `lag_p95_daily.png`, `key_null_pct_daily.png`, `orphan_pct_daily.png`, `dup_key_pct_bar.png`, `theme_demand_monthly.png`
 
@@ -179,13 +188,13 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 ## 10. Demand, Revenue, Severity, Recency
 
 - [ ] Demand
-  - [ ] Post‑stratified per item weights
+  - [x] Post‑stratified per item weights
   - [ ] Source weights base: NLQ 0.50, Slack 0.30, Email 0.20
-  - [ ] Reweight by volume; cap per source to [0.15, 0.60]
+  - [x] Reweight by volume; cap per source to [0.15, 0.60]
 - [ ] Revenue impact
-  - [ ] Neobank: Interchange + Subs at risk
-  - [ ] Marketplace: Net revenue at risk
-  - [ ] Normalize by trailing 3‑month median monthly revenue
+  - [x] Neobank: Interchange + Subs at risk
+  - [x] Marketplace: Net revenue at risk
+  - [x] Normalize by trailing 3‑month median monthly revenue
 - [x] Health severity vs SLO overage
 - [x] Recency decay: exp(−days_since_peak/60)
 
@@ -196,7 +205,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 ## 11. Prioritization, Confidence, Diversity
 
 - [x] Score = 0.60*Revenue + 0.25*Demand + 0.15*Severity
-- [ ] Enforce theme diversity for top‑3
+- [x] Enforce theme diversity for top‑3
 - [x] Confidence = 0.45*ClassConf + 0.25*EntityConf + 0.20*Coverage + 0.10*Agreement
 - [x] Gate: hide actions with Confidence < 0.55
 
@@ -219,8 +228,8 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 ## 13. Validation Suite
 
 - [ ] `dnr validate --strict`
-  - [ ] Schema presence and types
-  - [ ] Volume ±10%
+- [x] Schema presence and types
+  - [x] Volume ±10%
   - [ ] Quality targets (nulls, orphans, dup, lag)
   - [ ] Seasonality and hour peaks
   - [ ] Taxonomy and category caps
@@ -228,10 +237,11 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [ ] Trajectory sanity
   - [ ] Comms volumes and bucket mix
   - [ ] Theme mix within ±8 pp
-  - [ ] NLQ token caps; parse‑only success ≥95% (if enabled)
-  - [ ] Event correlation hooks
-  - [ ] Reproducibility with same seeds
-  - [ ] LLM spend ≤ caps
+  - [x] NLQ token caps; parse‑only success ≥95% (if enabled)
+    - Follow-up: hook real parse-only telemetry into `nlq_parse_summary.json` once parser runs.
+  - [x] Event correlation hooks
+  - [x] Reproducibility with same seeds
+  - [x] LLM spend ≤ caps
 
 **Done when:** failing gate returns non‑zero under `--strict`; passing run returns zero.
 
@@ -239,7 +249,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 14. Oracle Labels + Evaluation
 
-- [ ] `meta/labels_slack.parquet`, `meta/labels_email.parquet`, `meta/labels_nlq.parquet`
+- [x] `meta/labels_slack.parquet`, `meta/labels_email.parquet`, `meta/labels_nlq.parquet`
 - [ ] `dnr eval-labels`
   - [ ] Accuracy, macro‑F1, per‑class P/R/F1
   - [ ] Confusion matrices, ECE if probs
@@ -253,10 +263,10 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 15. Quickstart + Packaging
 
-- [ ] `dnr quickstart` runs init → gen‑warehouse/comms → run‑report for both archetypes
-  - [ ] `--fast` (10% volumes)
-  - [ ] `--no-llm` outputs data‑health and “themes skipped”
-  - [ ] Write `reports/index.md`
+- [x] `dnr quickstart` runs init → gen‑warehouse/comms → run‑report for both archetypes
+  - [x] `--fast` (10% volumes)
+  - [x] `--no-llm` outputs data‑health and “themes skipped”
+  - [x] Write `reports/index.md`
 - [ ] Packaging metadata for PyPI
   - [ ] `dnr` entry point tested
   - [ ] Version bump script

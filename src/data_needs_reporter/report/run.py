@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from data_needs_reporter.report.entities import (
     EntityExtractionConfig,
@@ -150,4 +150,37 @@ def run_entity_extraction_for_archetype(
     return results, stats
 
 
-__all__ = ["build_entity_dictionary", "run_entity_extraction_for_archetype"]
+def select_top_actions(
+    items: Sequence[Mapping[str, object]],
+    top_k: int = 3,
+    min_confidence: float = 0.55,
+) -> List[Mapping[str, object]]:
+    sorted_items = sorted(
+        items,
+        key=lambda item: float(item.get("score", 0.0) or 0.0),
+        reverse=True,
+    )
+    selected: List[Mapping[str, object]] = []
+    seen_themes: set[str] = set()
+    overflow: List[Mapping[str, object]] = []
+
+    for item in sorted_items:
+        confidence = float(item.get("confidence", 0.0) or 0.0)
+        if confidence < min_confidence:
+            continue
+        theme = str(item.get("theme") or "")
+        if theme not in seen_themes and len(selected) < top_k:
+            selected.append(item)
+            seen_themes.add(theme)
+        else:
+            overflow.append(item)
+
+    if len(selected) < top_k:
+        for item in overflow:
+            selected.append(item)
+            if len(selected) >= top_k:
+                break
+    return selected
+
+
+__all__ = ["build_entity_dictionary", "run_entity_extraction_for_archetype", "select_top_actions"]

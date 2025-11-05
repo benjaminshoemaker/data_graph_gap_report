@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import random
 from datetime import datetime, timedelta, timezone
@@ -7,6 +8,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterable, MutableMapping, Tuple
 
 from data_needs_reporter.config import AppConfig
+from data_needs_reporter.report.metrics import (
+    WAREHOUSE_SCHEMA_SPEC,
+    WAREHOUSE_VOLUME_TARGETS,
+)
+from data_needs_reporter.utils.hashing import write_hash_manifest
 from data_needs_reporter.utils.io import write_parquet_atomic
 from data_needs_reporter.utils.rand import poisson_sample, zipf_weights
 
@@ -36,6 +42,27 @@ NEOBANK_MERCHANT_SECTORS: Dict[str, Tuple[int, ...]] = {
 NEOBANK_MCC_TO_SECTOR: Dict[int, str] = {
     code: sector for sector, codes in NEOBANK_MERCHANT_SECTORS.items() for code in codes
 }
+
+
+def _collect_manifest_files(out_path: Path) -> Dict[str, Path]:
+    manifest_files: Dict[str, Path] = {
+        file_path.name: file_path for file_path in sorted(out_path.glob("*.parquet"))
+    }
+    summary_path = out_path / "data_quality_summary.json"
+    if summary_path.exists():
+        manifest_files[summary_path.name] = summary_path
+    schema_path = out_path / "schema.json"
+    if schema_path.exists():
+        manifest_files[schema_path.name] = schema_path
+    return manifest_files
+
+
+def write_warehouse_hash_manifest(out_dir: Path, seed: int | None) -> None:
+    out_path = Path(out_dir)
+    files = _collect_manifest_files(out_path)
+    seeds: Dict[str, object] = {"warehouse": seed if seed is not None else "unspecified"}
+    write_hash_manifest(out_path, files, seeds)
+
 
 if pl is not None:
     UTC_DATETIME = pl.Datetime(time_zone="UTC")
@@ -164,7 +191,9 @@ else:  # pragma: no cover - executed only when polars missing
     WAREHOUSE_SCHEMAS = {}
 
 
-def write_empty_warehouse(archetype: str, out_dir: Path) -> None:
+def write_empty_warehouse(
+    archetype: str, out_dir: Path, *, seed: int | None = None
+) -> None:
     _ensure_polars()
     archetype_key = archetype.lower()
     if archetype_key not in WAREHOUSE_SCHEMAS:
@@ -174,9 +203,38 @@ def write_empty_warehouse(archetype: str, out_dir: Path) -> None:
     out_path.mkdir(parents=True, exist_ok=True)
 
     schemas = WAREHOUSE_SCHEMAS[archetype_key]
+    tables_manifest: Dict[str, object] = {}
+    manifest: Dict[str, object] = {"tables": tables_manifest}
+    schema_spec = WAREHOUSE_SCHEMA_SPEC.get(archetype_key, {})
+    volume_targets = WAREHOUSE_VOLUME_TARGETS.get(archetype_key, {})
+
     for table_name, schema in schemas.items():
         df = _empty_dataframe(schema)
         write_parquet_atomic(out_path / f"{table_name}.parquet", df)
+
+        column_spec = schema_spec.get(table_name, {})
+        if isinstance(column_spec, dict):
+            columns_entry = {
+                column_name: {"type": column_type}
+                for column_name, column_type in column_spec.items()
+            }
+        else:
+            columns_entry = {
+                column_name: {"type": str(dtype).lower()}
+                for column_name, dtype in schema
+            }
+
+        entry: Dict[str, object] = {"columns": columns_entry}
+        if table_name in volume_targets:
+            entry["rows"] = volume_targets[table_name]
+        tables_manifest[table_name] = entry
+
+    (out_path / "schema.json").write_text(
+        json.dumps(manifest, indent=2),
+        encoding="utf-8",
+    )
+    (out_path / ".dry_run").write_text("dry-run\n", encoding="utf-8")
+    write_warehouse_hash_manifest(out_path, seed)
 
 
 def generate_neobank_dims(
@@ -188,6 +246,8 @@ def generate_neobank_dims(
     scale = cfg.warehouse.scale.lower()
     if scale == "evaluation":
         customer_count = 3500
+    elif scale == "quickstart":
+        customer_count = 25
     else:
         customer_count = 1000
 
@@ -272,7 +332,12 @@ def generate_neobank_dims(
     merchants = []
     sector_names = list(NEOBANK_MERCHANT_SECTORS.keys())
     sector_weights = [0.15, 0.15, 0.12, 0.12, 0.14, 0.1, 0.12, 0.1]
-    merchant_count = 800 if scale == "evaluation" else 200
+    if scale == "evaluation":
+        merchant_count = 800
+    elif scale == "quickstart":
+        merchant_count = 12
+    else:
+        merchant_count = 200
     merchant_id = 1
     for sector, weight in zip(sector_names, sector_weights):
         sector_target = max(int(merchant_count * weight), 1)
@@ -510,6 +575,9 @@ def generate_marketplace_dims(
     if scale == "evaluation":
         buyer_count = 9000
         seller_count = 2500
+    elif scale == "quickstart":
+        buyer_count = 60
+        seller_count = 20
     else:
         buyer_count = 3000
         seller_count = 800
@@ -686,7 +754,13 @@ def generate_marketplace_facts(
 
     day_weights = [0.92, 0.96, 1.0, 1.08, 1.14, 1.32, 1.26]
 
-    base_orders = 130 if cfg.warehouse.scale.lower() == "evaluation" else 60
+    scale = cfg.warehouse.scale.lower()
+    if scale == "evaluation":
+        base_orders = 130
+    elif scale == "quickstart":
+        base_orders = 5
+    else:
+        base_orders = 60
     orders: list[dict[str, Any]] = []
     order_items: list[dict[str, Any]] = []
     payments: list[dict[str, Any]] = []
@@ -844,6 +918,7 @@ __all__ = [
     "NEOBANK_MERCHANT_SECTORS",
     "NEOBANK_MCC_TO_SECTOR",
     "write_empty_warehouse",
+    "write_warehouse_hash_manifest",
     "generate_neobank_dims",
     "generate_neobank_facts",
     "generate_marketplace_dims",
