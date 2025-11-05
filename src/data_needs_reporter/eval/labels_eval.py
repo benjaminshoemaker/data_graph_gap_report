@@ -4,7 +4,7 @@ import json
 import math
 import random
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Dict, List, Mapping, Sequence
 
 import polars as pl
 

@@ -11,8 +11,8 @@ from urllib.parse import urlparse
 from data_needs_reporter.config import AppConfig
 from data_needs_reporter.report.llm import RepairingLLMClient
 from data_needs_reporter.utils.cost_guard import CostGuard
-from data_needs_reporter.utils.io import write_parquet_atomic
 from data_needs_reporter.utils.hashing import compute_file_hash
+from data_needs_reporter.utils.io import write_parquet_atomic
 
 try:  # pragma: no cover - optional dependency
     import polars as _pl

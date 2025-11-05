@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import subprocess
@@ -7,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import polars as pl
-
 from typer.testing import CliRunner
 
 from data_needs_reporter.cli import app
@@ -368,9 +366,11 @@ def _write_minimal_comms(path: Path) -> None:
     )
 
 def test_version_flag_reports_package_version() -> None:
+    from data_needs_reporter import __version__
+
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.stdout
+    assert __version__ in result.stdout
 
 
 def test_root_command_displays_help() -> None:
