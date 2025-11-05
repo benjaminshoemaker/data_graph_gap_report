@@ -145,9 +145,7 @@ def _apply_jitter(
     if jitter <= 0:
         return list(profile)
     jitter = min(jitter, 1.0)
-    return [
-        max(value * rng.uniform(1 - jitter, 1 + jitter), 0.0) for value in profile
-    ]
+    return [max(value * rng.uniform(1 - jitter, 1 + jitter), 0.0) for value in profile]
 
 
 def _normalize(values: Iterable[float]) -> List[float]:

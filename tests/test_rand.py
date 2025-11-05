@@ -86,10 +86,16 @@ def test_zipf_weights_normalized() -> None:
 def test_churn_schedule_deterministic() -> None:
     rng1 = make_rng(777)
     rng2 = make_rng(777)
-    schedule1 = churn_schedule(rng1, population=10, monthly_churn_rate=0.2, max_months=6)
-    schedule2 = churn_schedule(rng2, population=10, monthly_churn_rate=0.2, max_months=6)
+    schedule1 = churn_schedule(
+        rng1, population=10, monthly_churn_rate=0.2, max_months=6
+    )
+    schedule2 = churn_schedule(
+        rng2, population=10, monthly_churn_rate=0.2, max_months=6
+    )
     assert schedule1 == schedule2
 
     rng3 = make_rng(778)
-    schedule3 = churn_schedule(rng3, population=10, monthly_churn_rate=0.2, max_months=6)
+    schedule3 = churn_schedule(
+        rng3, population=10, monthly_churn_rate=0.2, max_months=6
+    )
     assert schedule1 != schedule3

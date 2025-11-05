@@ -82,6 +82,7 @@ def pack_thread(
         add_message(msg, force=True)
 
     remaining = [msg for msg in ordered if msg.get("message_id") not in added_ids]
+
     def score_value(msg: Mapping[str, Any]) -> float:
         score = msg.get(score_field)
         try:

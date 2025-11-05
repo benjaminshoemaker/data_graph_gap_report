@@ -73,7 +73,9 @@ def _load_labels(labels_dir: Path) -> Dict[str, pl.DataFrame]:
     return label_frames
 
 
-def _unique_classes(true_labels: Sequence[str], pred_labels: Sequence[str]) -> List[str]:
+def _unique_classes(
+    true_labels: Sequence[str], pred_labels: Sequence[str]
+) -> List[str]:
     classes: List[str] = []
     for value in list(true_labels) + list(pred_labels):
         if value not in classes:
@@ -81,7 +83,9 @@ def _unique_classes(true_labels: Sequence[str], pred_labels: Sequence[str]) -> L
     return classes
 
 
-def _confusion_matrix(true_labels: Sequence[str], pred_labels: Sequence[str], classes: Sequence[str]) -> Dict[str, Dict[str, int]]:
+def _confusion_matrix(
+    true_labels: Sequence[str], pred_labels: Sequence[str], classes: Sequence[str]
+) -> Dict[str, Dict[str, int]]:
     confusion: Dict[str, Dict[str, int]] = {
         cls: {other: 0 for other in classes} for cls in classes
     }
@@ -97,12 +101,18 @@ def _confusion_matrix(true_labels: Sequence[str], pred_labels: Sequence[str], cl
     return confusion
 
 
-def _per_class_metrics(confusion: Dict[str, Dict[str, int]], classes: Sequence[str]) -> Dict[str, Dict[str, float]]:
+def _per_class_metrics(
+    confusion: Dict[str, Dict[str, int]], classes: Sequence[str]
+) -> Dict[str, Dict[str, float]]:
     per_class: Dict[str, Dict[str, float]] = {}
     for cls in classes:
         tp = confusion.get(cls, {}).get(cls, 0)
-        fp = sum(confusion.get(other, {}).get(cls, 0) for other in classes if other != cls)
-        fn = sum(confusion.get(cls, {}).get(other, 0) for other in classes if other != cls)
+        fp = sum(
+            confusion.get(other, {}).get(cls, 0) for other in classes if other != cls
+        )
+        fn = sum(
+            confusion.get(cls, {}).get(other, 0) for other in classes if other != cls
+        )
         support = tp + fn
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
         recall = tp / support if support > 0 else 0.0
@@ -135,7 +145,9 @@ def _macro_f1(per_class: Mapping[str, Mapping[str, float]]) -> float:
     return sum(scores) / len(scores) if scores else 0.0
 
 
-def _expected_calibration_error(confidences: Sequence[float], correct: Sequence[bool], bins: int = ECE_BINS) -> float:
+def _expected_calibration_error(
+    confidences: Sequence[float], correct: Sequence[bool], bins: int = ECE_BINS
+) -> float:
     if not confidences:
         return 0.0
     total = len(confidences)
@@ -160,7 +172,13 @@ def _expected_calibration_error(confidences: Sequence[float], correct: Sequence[
     return ece
 
 
-def _bootstrap_macro_f1(true_labels: Sequence[str], pred_labels: Sequence[str], classes: Sequence[str], samples: int, seed: int) -> Dict[str, float]:
+def _bootstrap_macro_f1(
+    true_labels: Sequence[str],
+    pred_labels: Sequence[str],
+    classes: Sequence[str],
+    samples: int,
+    seed: int,
+) -> Dict[str, float]:
     n = len(true_labels)
     if n == 0:
         return {"lower": 0.0, "upper": 0.0}
@@ -192,7 +210,9 @@ def _classification_metrics(
     macro_f1 = _macro_f1(per_class)
     correct_flags = [t == p for t, p in zip(true_labels, pred_labels)]
     ece = _expected_calibration_error(confidences, correct_flags)
-    ci = _bootstrap_macro_f1(true_labels, pred_labels, classes, BOOTSTRAP_SAMPLES, BOOTSTRAP_SEED)
+    ci = _bootstrap_macro_f1(
+        true_labels, pred_labels, classes, BOOTSTRAP_SAMPLES, BOOTSTRAP_SEED
+    )
     return {
         "accuracy": accuracy,
         "macro_f1": macro_f1,
@@ -204,7 +224,9 @@ def _classification_metrics(
     }
 
 
-def _prepare_joined(predictions: pl.DataFrame, labels: pl.DataFrame, id_col: str) -> pl.DataFrame:
+def _prepare_joined(
+    predictions: pl.DataFrame, labels: pl.DataFrame, id_col: str
+) -> pl.DataFrame:
     if id_col not in predictions.columns:
         raise ValueError(f"Predictions missing required id column '{id_col}'")
     if id_col not in labels.columns:
@@ -219,7 +241,9 @@ def _prepare_joined(predictions: pl.DataFrame, labels: pl.DataFrame, id_col: str
         pred_cols.append("confidence")
         rename_map["confidence"] = "confidence_pred"
 
-    pred_subset = predictions.select([pl.col(col) for col in pred_cols]).rename(rename_map)
+    pred_subset = predictions.select([pl.col(col) for col in pred_cols]).rename(
+        rename_map
+    )
 
     label_cols = [id_col, "theme"]
     label_rename = {"theme": "theme_true"}
@@ -232,7 +256,12 @@ def _prepare_joined(predictions: pl.DataFrame, labels: pl.DataFrame, id_col: str
     return joined
 
 
-def evaluate_labels(preds_dir: Path, labels_dir: Path, out_dir: Path, gate_f1: float = DEFAULT_THEME_GATE) -> Dict[str, object]:
+def evaluate_labels(
+    preds_dir: Path,
+    labels_dir: Path,
+    out_dir: Path,
+    gate_f1: float = DEFAULT_THEME_GATE,
+) -> Dict[str, object]:
     preds_dir = Path(preds_dir)
     labels_dir = Path(labels_dir)
     out_dir = Path(out_dir)
@@ -267,17 +296,37 @@ def evaluate_labels(preds_dir: Path, labels_dir: Path, out_dir: Path, gate_f1: f
                     "coverage": 0.0,
                 }
             }
-            gates.append({"name": f"{source}_theme_macro_f1", "value": 0.0, "threshold": gate_f1, "passed": False})
-            gates.append({"name": f"{source}_coverage", "value": 0.0, "threshold": COVERAGE_GATE, "passed": False})
+            gates.append(
+                {
+                    "name": f"{source}_theme_macro_f1",
+                    "value": 0.0,
+                    "threshold": gate_f1,
+                    "passed": False,
+                }
+            )
+            gates.append(
+                {
+                    "name": f"{source}_coverage",
+                    "value": 0.0,
+                    "threshold": COVERAGE_GATE,
+                    "passed": False,
+                }
+            )
             continue
 
         joined = _prepare_joined(source_preds, source_labels, id_col)
         coverage = joined.height / label_count if label_count else 0.0
-        classes = _unique_classes(joined["theme_true"].to_list(), joined["theme_pred"].to_list())
+        classes = _unique_classes(
+            joined["theme_true"].to_list(), joined["theme_pred"].to_list()
+        )
         theme_confidences = (
             joined["confidence_pred"].to_list()
             if "confidence_pred" in joined.columns
-            else joined["relevance_pred"].to_list() if "relevance_pred" in joined.columns else [1.0] * joined.height
+            else (
+                joined["relevance_pred"].to_list()
+                if "relevance_pred" in joined.columns
+                else [1.0] * joined.height
+            )
         )
         metrics = _classification_metrics(
             joined["theme_true"].to_list(),
@@ -327,12 +376,26 @@ def evaluate_labels(preds_dir: Path, labels_dir: Path, out_dir: Path, gate_f1: f
         overall_pred.extend(joined["theme_pred"].to_list())
         overall_conf.extend(theme_confidences)
 
-        if source in {"slack", "email"} and "relevance_true" in joined.columns and "relevance_pred" in joined.columns:
-            rel_true = ["positive" if float(val) >= 0.5 else "negative" for val in joined["relevance_true"].to_list()]
-            rel_pred_scores = [max(0.0, min(1.0, float(val))) for val in joined["relevance_pred"].to_list()]
-            rel_pred = ["positive" if score >= 0.5 else "negative" for score in rel_pred_scores]
+        if (
+            source in {"slack", "email"}
+            and "relevance_true" in joined.columns
+            and "relevance_pred" in joined.columns
+        ):
+            rel_true = [
+                "positive" if float(val) >= 0.5 else "negative"
+                for val in joined["relevance_true"].to_list()
+            ]
+            rel_pred_scores = [
+                max(0.0, min(1.0, float(val)))
+                for val in joined["relevance_pred"].to_list()
+            ]
+            rel_pred = [
+                "positive" if score >= 0.5 else "negative" for score in rel_pred_scores
+            ]
             rel_classes = _unique_classes(rel_true, rel_pred)
-            rel_metrics = _classification_metrics(rel_true, rel_pred, rel_pred_scores, rel_classes, coverage)
+            rel_metrics = _classification_metrics(
+                rel_true, rel_pred, rel_pred_scores, rel_classes, coverage
+            )
             summary_sources[source]["relevance"] = {
                 "accuracy": rel_metrics["accuracy"],
                 "macro_f1": rel_metrics["macro_f1"],
@@ -359,7 +422,9 @@ def evaluate_labels(preds_dir: Path, labels_dir: Path, out_dir: Path, gate_f1: f
                 )
 
     overall_classes = _unique_classes(overall_true, overall_pred)
-    overall_metrics = _classification_metrics(overall_true, overall_pred, overall_conf, overall_classes, 1.0)
+    overall_metrics = _classification_metrics(
+        overall_true, overall_pred, overall_conf, overall_classes, 1.0
+    )
 
     summary = {
         "overall": {
@@ -375,7 +440,9 @@ def evaluate_labels(preds_dir: Path, labels_dir: Path, out_dir: Path, gate_f1: f
     summary["gates"] = {gate["name"]: gate for gate in gates}
     summary["gates_pass"] = gates_pass
 
-    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (out_dir / "summary.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
 
     if per_class_rows:
         pl.DataFrame(per_class_rows).write_csv(out_dir / "per_class.csv")

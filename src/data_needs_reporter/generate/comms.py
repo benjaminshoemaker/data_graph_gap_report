@@ -423,7 +423,9 @@ def _generate_email_messages(
         prompt = "Produce an email summary of a data need with subject, body, bucket, tokens."
         response = llm_client.json_complete(prompt, temperature=0.1)
         content = response or {}
-        raw_body = content.get("body", "Requesting deeper analysis on retention funnel.")
+        raw_body = content.get(
+            "body", "Requesting deeper analysis on retention funnel."
+        )
         body, link_domains = _sanitize_links(raw_body)
         subject = content.get("subject", "Follow-up on data health")
         bucket = content.get("bucket", "data_quality")
@@ -662,9 +664,7 @@ def _coverage_report(
         for bucket in sorted(bucket_keys):
             actual_bucket = bucket_actuals.get(bucket, 0)
             target_bucket = bucket_targets.get(bucket, 0)
-            bucket_cov = (
-                actual_bucket / target_bucket if target_bucket else 1.0
-            )
+            bucket_cov = actual_bucket / target_bucket if target_bucket else 1.0
             per_bucket[bucket] = {
                 "actual": actual_bucket,
                 "target": target_bucket,

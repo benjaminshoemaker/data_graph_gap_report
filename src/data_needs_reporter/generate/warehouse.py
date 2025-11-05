@@ -60,7 +60,9 @@ def _collect_manifest_files(out_path: Path) -> Dict[str, Path]:
 def write_warehouse_hash_manifest(out_dir: Path, seed: int | None) -> None:
     out_path = Path(out_dir)
     files = _collect_manifest_files(out_path)
-    seeds: Dict[str, object] = {"warehouse": seed if seed is not None else "unspecified"}
+    seeds: Dict[str, object] = {
+        "warehouse": seed if seed is not None else "unspecified"
+    }
     write_hash_manifest(out_path, files, seeds)
 
 
