@@ -13,7 +13,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [x] `.gitignore`, `.env.example`, `README.md`
 - [x] Configure console script `dnr`
 - [x] Add pre-commit hooks (black, isort, ruff)
-- [ ] CI: GitHub Actions
+- [x] CI: GitHub Actions
   - [x] Python 3.11 matrix on Linux/macOS
   - [x] Cache Poetry and pip
   - [x] Run unit + integration tests
@@ -227,7 +227,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 13. Validation Suite
 
-- [ ] `dnr validate --strict`
+- [x] `dnr validate --strict`
 - [x] Schema presence and types
   - [x] Volume ±10%
   - [ ] Quality targets (nulls, orphans, dup, lag)
@@ -291,11 +291,11 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 17. Error Handling + Exit Codes
 
-- [ ] Non‑zero only on internal errors (`run-report`)
-- [ ] `--strict` escalates coverage/budget breaches to non‑zero
-- [ ] LLM parse error policy: repair once, count excluded, stop after 50 consecutive per source
-- [ ] Budget guard never exceeds cap; sample‑to‑fit allocator stops early
-- [ ] Atomic writes avoid partial artifacts
+- [x] Non‑zero only on internal errors (`run-report`)
+- [x] `--strict` escalates coverage/budget breaches to non‑zero
+- [x] LLM parse error policy: repair once, count excluded, stop after 50 consecutive per source
+- [x] Budget guard never exceeds cap; sample‑to‑fit allocator stops early
+- [x] Atomic writes avoid partial artifacts
 
 **Done when:** simulated failures behave per policy; logs clear.
 
@@ -303,16 +303,16 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 18. Docs
 
-- [ ] README sections
+- [x] README sections
   - [x] Quickstart
   - [x] Commands and flags
   - [x] Config precedence
-  - [ ] Seeds and reproducibility
-  - [ ] Spend caps and budgeting
-  - [ ] Validation and eval
+  - [x] Seeds and reproducibility
+  - [x] Spend caps and budgeting
+  - [x] Validation and eval
   - [x] Troubleshooting (parse errors, low coverage, cap hits)
-- [ ] `CONTRIBUTING.md` (tests, style, releases)
-- [ ] `docs/architecture.md` (module map and flows)
+- [x] `CONTRIBUTING.md` (tests, style, releases)
+- [x] `docs/architecture.md` (module map and flows)
 
 **Done when:** a new developer can run end‑to‑end from README.
 
@@ -322,7 +322,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 - [x] End‑to‑end smoke test
   - [x] init → gen‑warehouse(neobank) → gen‑comms(neobank with mock LLM) → run‑report → validate --strict
-- [ ] Golden snapshots for `data_health.json`, `themes.json` structure, and figure hashes
+- [x] Golden snapshots for `data_health.json`, `themes.json` structure, and figure hashes
 - [ ] Tag `v0.1.0`
 
 **Done when:** e2e test green; artifacts produced; tag pushed.
