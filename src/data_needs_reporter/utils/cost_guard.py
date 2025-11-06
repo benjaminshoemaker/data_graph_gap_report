@@ -26,12 +26,17 @@ class CostGuard:
         if self.price_per_1k_tokens <= 0:
             raise ValueError("price_per_1k_tokens must be positive")
         self._price_per_token = self.price_per_1k_tokens / 1000.0
-        self._cap_with_margin = self.cap_usd * (1 - self.safety_margin)
+        margin = min(max(self.safety_margin, 0.0), 0.95)
+        margin_cap = self.cap_usd * (1 - margin)
+        # Reserve at least the cost of one token to avoid zero budget
+        reserve = max(self._price_per_token, 1e-9)
+        self._cap_with_margin = max(margin_cap - reserve, 0.0)
 
     def can_consume(self, tokens: int) -> bool:
-        return (
-            self.tokens_used + tokens
-        ) * self._price_per_token <= self._cap_with_margin + 1e-12
+        if tokens <= 0:
+            return True
+        required = (self.tokens_used + tokens) * self._price_per_token
+        return required <= self._cap_with_margin + 1e-12
 
     def try_consume(self, tokens: int, channel: Optional[str] = None) -> bool:
         if not self.can_consume(tokens):
@@ -55,11 +60,9 @@ class CostGuard:
 
     @property
     def token_budget(self) -> int:
-        return (
-            int(self._cap_with_margin / self._price_per_token)
-            if self._price_per_token
-            else 0
-        )
+        if self._price_per_token == 0:
+            return 0
+        return max(int(self._cap_with_margin / self._price_per_token), 0)
 
     def budget_snapshot(self, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         data: Dict[str, Any] = {

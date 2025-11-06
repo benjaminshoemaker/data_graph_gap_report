@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from data_needs_reporter.report.entities import EntityExtractionConfig, extract_entities
 from data_needs_reporter.report.llm import LLMClient
@@ -180,8 +180,51 @@ def select_top_actions(
     return selected
 
 
+def assess_budget_health(
+    budget: Mapping[str, Any],
+    *,
+    coverage_floor: float = 0.2,
+) -> Tuple[List[str], bool]:
+    """Identify budget warnings and whether they should fail strict mode."""
+
+    warnings: List[str] = []
+    strict_failure = False
+
+    coverage = budget.get("coverage")
+    if isinstance(coverage, Mapping):
+        for source, entry in coverage.items():
+            overall = entry.get("overall", {})
+            coverage_pct_raw = overall.get("coverage_pct")
+            try:
+                coverage_pct = float(coverage_pct_raw)
+            except (TypeError, ValueError):
+                coverage_pct = None
+
+            met_floor = overall.get("met_floor")
+            below_floor = (
+                coverage_pct is not None and coverage_pct < coverage_floor
+            ) or met_floor is False
+            if below_floor:
+                pct_display = (
+                    f"{coverage_pct:.2f}"
+                    if coverage_pct is not None
+                    else str(coverage_pct_raw)
+                )
+                warnings.append(
+                    f"Coverage below {coverage_floor:.0%} for {source} (coverage={pct_display})."
+                )
+                strict_failure = True
+
+    if budget.get("stopped_due_to_cap"):
+        warnings.append("Generation halted due to spend cap.")
+        strict_failure = True
+
+    return warnings, strict_failure
+
+
 __all__ = [
     "build_entity_dictionary",
+    "assess_budget_health",
     "run_entity_extraction_for_archetype",
     "select_top_actions",
 ]

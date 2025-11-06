@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import os
+from hashlib import sha256
 
 import pytest
 from typer.testing import CliRunner
@@ -78,6 +80,7 @@ def test_end_to_end_pipeline(tmp_path: Path) -> None:
     pytest.importorskip("polars")
 
     with runner.isolated_filesystem():
+        golden_dir = Path(__file__).resolve().parent / "goldens"
         config_path = Path("test_config.json")
         _write_config(config_path)
 
@@ -122,3 +125,37 @@ def test_end_to_end_pipeline(tmp_path: Path) -> None:
         )
 
         assert (Path("reports") / "neobank" / "exec_summary.json").exists()
+
+        report_dir = Path("reports") / "neobank"
+        data_health = json.loads((report_dir / "data_health.json").read_text())
+        themes = json.loads((report_dir / "themes.json").read_text())
+        figure_hashes = {
+            path.name: sha256(path.read_bytes()).hexdigest()
+            for path in (report_dir / "figures").glob("*.png")
+        }
+
+        if os.getenv("UPDATE_GOLDENS") == "1":
+            golden_dir.mkdir(parents=True, exist_ok=True)
+            (golden_dir / "data_health.json").write_text(
+                json.dumps(data_health, indent=2), encoding="utf-8"
+            )
+            (golden_dir / "themes.json").write_text(
+                json.dumps(themes, indent=2), encoding="utf-8"
+            )
+            (golden_dir / "figures.json").write_text(
+                json.dumps(figure_hashes, indent=2), encoding="utf-8"
+            )
+        else:
+            expected_data_health = json.loads(
+                (golden_dir / "data_health.json").read_text(encoding="utf-8")
+            )
+            expected_themes = json.loads(
+                (golden_dir / "themes.json").read_text(encoding="utf-8")
+            )
+            expected_figures = json.loads(
+                (golden_dir / "figures.json").read_text(encoding="utf-8")
+            )
+
+            assert data_health == expected_data_health
+            assert themes == expected_themes
+            assert figure_hashes == expected_figures

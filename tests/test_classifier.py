@@ -475,10 +475,20 @@ def test_classify_threads_and_save_predictions(
     assert len(predictions) == 1
     assert predictions[0]["theme"] == "data_quality"
     assert predictions[0]["message_count"] <= 20
+    assert predictions[0]["parse_error"] is False
+    assert predictions[0]["include_in_demand"] is True
     out_path = tmp_path / "preds.parquet"
     save_predictions(predictions, out_path)
     df = pl.read_parquet(out_path)
-    assert set(df.columns) >= {"thread_id", "source", "theme", "relevance"}
+    assert set(df.columns) >= {
+        "thread_id",
+        "source",
+        "theme",
+        "relevance",
+        "parse_error",
+        "include_in_demand",
+    }
+    assert df["parse_error"].sum() == 0
 
 
 def test_classify_threads_parse_error_limit(
@@ -489,8 +499,10 @@ def test_classify_threads_parse_error_limit(
     class AlwaysBadProvider(MockProvider):
         def __init__(self) -> None:
             super().__init__(response={})
+            self.calls = 0
 
         def json_complete(self, payload):  # type: ignore[override]
+            self.calls += 1
             raise ValueError("bad response")
 
     provider = AlwaysBadProvider()
@@ -523,8 +535,72 @@ def test_classify_threads_parse_error_limit(
         for idx in range(1, 4)
     ]
 
-    with pytest.raises(LLMError):
-        classify_threads(threads, client, source="slack", parse_error_limit=2)
+    predictions = classify_threads(threads, client, source="slack", parse_error_limit=2)
+    assert len(predictions) == 2  # stopped after hitting limit
+    assert all(pred["parse_error"] for pred in predictions)
+    assert all(pred["include_in_demand"] is False for pred in predictions)
+    assert provider.calls == 2
 
 
 runner = CliRunner()
+
+
+def test_classify_threads_parse_errors_reset_on_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class FlakyProvider(MockProvider):
+        def __init__(self) -> None:
+            super().__init__(
+                response={"content": {"theme": "data_gap", "relevance": 0.7}}
+            )
+            self.failures = 0
+            self.calls = 0
+
+        def json_complete(self, payload):  # type: ignore[override]
+            self.calls += 1
+            if self.failures < 2:
+                self.failures += 1
+                raise ValueError("temporary failure")
+            return super().json_complete(payload)
+
+    provider = FlakyProvider()
+    client = RepairingLLMClient(
+        provider=provider,
+        model="mock-model",
+        api_key_env="OPENAI_API_KEY",
+        timeout_s=5.0,
+        max_output_tokens=64,
+        cache_dir=tmp_path / "cache-flaky",
+        repair_attempts=0,
+    )
+
+    now = datetime(2024, 1, 10, tzinfo=timezone.utc)
+    threads = [
+        {
+            "thread_id": idx,
+            "messages": [
+                {
+                    "message_id": idx * 10,
+                    "thread_id": idx,
+                    "user_id": 1,
+                    "body": f"Body text {idx}",
+                    "tokens": 40,
+                    "sent_at": now,
+                    "prefilter_score": 0.9,
+                }
+            ],
+        }
+        for idx in range(1, 4)
+    ]
+
+    predictions = classify_threads(
+        threads, client, source="email", parse_error_limit=5, exec_user_ids=None
+    )
+    assert len(predictions) == 3
+    assert sum(1 for pred in predictions if pred["parse_error"]) == 2
+    assert predictions[-1]["parse_error"] is False
+    assert predictions[-1]["theme"] == "data_gap"
+    # ensure consecutive errors reset so we processed final thread
+    assert provider.calls == 3

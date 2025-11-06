@@ -1,0 +1,22 @@
+{
+  "themes": [
+    {
+      "theme": "data_quality",
+      "score": 0.795,
+      "confidence": 0.804,
+      "summary": "Address missing customer attributes impacting revenue dashboards."
+    },
+    {
+      "theme": "pipeline_health",
+      "score": 0.7124999999999999,
+      "confidence": 0.7345,
+      "summary": "Stabilize order ingestion pipeline to reduce lag spikes."
+    },
+    {
+      "theme": "governance",
+      "score": 0.59,
+      "confidence": 0.639,
+      "summary": "Improve data contract coverage for marketplace sellers."
+    }
+  ]
+}
