@@ -153,10 +153,24 @@ def classify_threads(
             consecutive_errors = 0
         except LLMError as exc:
             consecutive_errors += 1
+            predictions.append(
+                {
+                    "thread_id": thread.get("thread_id"),
+                    "source": source,
+                    "theme": None,
+                    "relevance": 0.0,
+                    "confidence": 0.0,
+                    "message_ids": [msg.get("message_id") for msg in packed_messages],
+                    "message_count": len(packed_messages),
+                    "token_count": packed.get("token_total", 0),
+                    "raw_response": None,
+                    "parse_error": True,
+                    "include_in_demand": False,
+                    "error": str(exc),
+                }
+            )
             if consecutive_errors >= parse_error_limit:
-                raise LLMError(
-                    f"Parsing failed {consecutive_errors} times for source {source}"
-                ) from exc
+                break
             continue
 
         theme = response.get("theme")
@@ -177,6 +191,9 @@ def classify_threads(
                 "message_count": len(packed_messages),
                 "token_count": packed.get("token_total", 0),
                 "raw_response": response,
+                "parse_error": False,
+                "include_in_demand": True,
+                "error": None,
             }
         )
 

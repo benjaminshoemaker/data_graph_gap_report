@@ -39,6 +39,7 @@ from data_needs_reporter.report.metrics import (
     validate_volume_targets,
     validate_warehouse_schema,
 )
+from data_needs_reporter.report.run import assess_budget_health
 from data_needs_reporter.report.scoring import compute_confidence, compute_score
 from data_needs_reporter.utils.cost_guard import CostGuard
 from data_needs_reporter.utils.hashing import compute_file_hash
@@ -75,6 +76,23 @@ def _detect_archetype_from_path(warehouse: Path, config: AppConfig) -> str:
     if candidates:
         return candidates[0]
     return next(iter(TABLE_METRIC_SPECS.keys()), "neobank")
+
+
+def _evaluate_budget_health(comms_path: Path) -> tuple[list[str], bool]:
+    budget_path = Path(comms_path) / "budget.json"
+    if not budget_path.exists():
+        raise FileNotFoundError(f"Budget file not found: {budget_path}")
+
+    try:
+        payload = json.loads(budget_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in budget file {budget_path}") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError(f"Budget file {budget_path} must be a JSON object.")
+
+    warnings, strict_failure = assess_budget_health(payload)
+    return warnings, strict_failure
 
 
 @app.callback(invoke_without_command=True)
@@ -400,6 +418,11 @@ def run_report_cmd(
         help="Output directory for reports.",
         is_flag=False,
     ),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit with non-zero status if coverage or budget issues are detected.",
+    ),
 ) -> None:
     ctx_obj = ctx.obj or {}
     logger = ctx_obj.get("logger")
@@ -424,6 +447,20 @@ def run_report_cmd(
     figures_dir = out_dir / "figures"
     out_dir.mkdir(parents=True, exist_ok=True)
     figures_dir.mkdir(parents=True, exist_ok=True)
+
+    budget_warnings: list[str] = []
+    strict_failure = False
+    try:
+        budget_warnings, strict_failure = _evaluate_budget_health(comms)
+    except FileNotFoundError:
+        budget_warnings = []
+        strict_failure = False
+    except Exception as exc:  # pragma: no cover - unexpected corruption
+        message = f"Failed to inspect communications budget: {exc}"
+        typer.echo(message, err=True)
+        if logger:
+            logger.error("Budget inspection failed: %s", exc, exc_info=True)
+        raise typer.Exit(code=1) from exc
 
     now = datetime.utcnow().isoformat()
 
@@ -562,6 +599,16 @@ def run_report_cmd(
         "comms_path": str(comms),
     }
     (out_dir / "budget.json").write_text(json.dumps(budget, indent=2), encoding="utf-8")
+
+    for warning in budget_warnings:
+        typer.echo(f"WARNING: {warning}")
+        if logger:
+            logger.warning(warning)
+
+    if strict and strict_failure:
+        if logger:
+            logger.error("Strict run-report failure due to coverage or budget issues.")
+        raise typer.Exit(code=1)
 
     typer.echo(f"Report written to {out_dir}")
     if logger:

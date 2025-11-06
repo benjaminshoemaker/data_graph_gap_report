@@ -1,4 +1,4 @@
-.PHONY: test lint fmt e2e bump
+.PHONY: test lint fmt e2e bump release
 
 test:
 	poetry run pytest
@@ -28,3 +28,15 @@ else
 	@echo "DRY RUN: git commit -m \"Bump version to $(VERSION)\""
 	@echo "DRY RUN: git tag v$(VERSION)"
 endif
+
+release:
+	@version=$$(python3 -c 'import re, pathlib; print(re.search(r"^version = \"([^\"]+)\"", pathlib.Path("pyproject.toml").read_text(), re.MULTILINE).group(1))'); \
+	if [ -z "$$version" ]; then \
+	  echo "Unable to determine project version" >&2; \
+	  exit 1; \
+	fi; \
+	if [ -n "$(strip $(DRY_RUN))" ]; then \
+	  echo "DRY RUN: git tag v$$version"; \
+	else \
+	  git tag v$$version; \
+	fi

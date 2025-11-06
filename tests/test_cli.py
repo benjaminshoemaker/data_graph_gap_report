@@ -464,6 +464,110 @@ def test_run_report_generates_outputs(tmp_path: Path) -> None:
         assert csv_lines[0].startswith("table,")
 
 
+def test_run_report_warns_on_coverage_breach() -> None:
+    with runner.isolated_filesystem():
+        warehouse = Path("warehouse")
+        comms = Path("comms")
+        warehouse.mkdir()
+        comms.mkdir()
+        _write_minimal_comms(comms)
+        budget_path = comms / "budget.json"
+        budget = json.loads(budget_path.read_text(encoding="utf-8"))
+        slack_overall = (
+            budget.setdefault("coverage", {})
+            .setdefault("slack", {})
+            .setdefault("overall", {})
+        )
+        slack_overall["coverage_pct"] = 0.1
+        slack_overall["met_floor"] = False
+        budget_path.write_text(json.dumps(budget, indent=2), encoding="utf-8")
+        out_dir = Path("reports") / "neobank"
+        result = runner.invoke(
+            app,
+            [
+                "run-report",
+                "--warehouse",
+                str(warehouse),
+                "--comms",
+                str(comms),
+                "--out",
+                str(out_dir),
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Coverage below 20%" in result.stdout
+
+
+def test_run_report_strict_fails_on_coverage_breach() -> None:
+    with runner.isolated_filesystem():
+        warehouse = Path("warehouse")
+        comms = Path("comms")
+        warehouse.mkdir()
+        comms.mkdir()
+        _write_minimal_comms(comms)
+        budget_path = comms / "budget.json"
+        budget = json.loads(budget_path.read_text(encoding="utf-8"))
+        slack_overall = (
+            budget.setdefault("coverage", {})
+            .setdefault("slack", {})
+            .setdefault("overall", {})
+        )
+        slack_overall["coverage_pct"] = 0.05
+        slack_overall["met_floor"] = False
+        budget_path.write_text(json.dumps(budget, indent=2), encoding="utf-8")
+        out_dir = Path("reports") / "neobank"
+        result = runner.invoke(
+            app,
+            [
+                "run-report",
+                "--warehouse",
+                str(warehouse),
+                "--comms",
+                str(comms),
+                "--out",
+                str(out_dir),
+                "--strict",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "Coverage below 20%" in result.stdout
+        assert "Report written" not in result.stdout
+
+
+def test_run_report_strict_fails_on_budget_cap() -> None:
+    with runner.isolated_filesystem():
+        warehouse = Path("warehouse")
+        comms = Path("comms")
+        warehouse.mkdir()
+        comms.mkdir()
+        _write_minimal_comms(comms)
+        budget_path = comms / "budget.json"
+        budget = json.loads(budget_path.read_text(encoding="utf-8"))
+        budget["stopped_due_to_cap"] = True
+        coverage = budget.setdefault("coverage", {})
+        for source in ("slack", "email", "nlq"):
+            overall = coverage.setdefault(source, {}).setdefault("overall", {})
+            overall["coverage_pct"] = 1.0
+            overall["met_floor"] = True
+        budget_path.write_text(json.dumps(budget, indent=2), encoding="utf-8")
+        out_dir = Path("reports") / "neobank"
+        result = runner.invoke(
+            app,
+            [
+                "run-report",
+                "--warehouse",
+                str(warehouse),
+                "--comms",
+                str(comms),
+                "--out",
+                str(out_dir),
+                "--strict",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "spend cap" in result.stdout.lower()
+
+
 def test_validate_strict_fails_on_marker(tmp_path: Path) -> None:
     with runner.isolated_filesystem():
         warehouse = Path("warehouse")
