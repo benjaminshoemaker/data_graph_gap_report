@@ -24,11 +24,15 @@ def test_perf_benchmarks_respect_budgets(tmp_path: Path) -> None:
         str(tmp_path),
         "--report-format",
         "json",
+        "--report-file",
+        str(tmp_path / "bench.json"),
         "--fail-on-budget",
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     detail = f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     assert result.returncode == 0, f"bench.py failed\n{detail}"
 
-    payload = json.loads(result.stdout)
+    payload_path = tmp_path / "bench.json"
+    assert payload_path.exists(), "bench.json missing in workspace"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
     assert payload.get("all_within_budget"), f"Benchmarks exceeded budgets\n{detail}"

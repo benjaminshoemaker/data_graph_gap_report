@@ -67,7 +67,12 @@
         "min_share_pct": 20.0,
         "min_days_pct": 80.0
       },
-      "category_caps": {}
+      "category_caps": {
+        "values": {}
+      }
+    },
+    "monetization": {
+      "attach_targets": {}
     }
   },
   "budget": {

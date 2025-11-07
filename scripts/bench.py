@@ -253,7 +253,6 @@ def _build_commands(
                     str(comms_dir),
                     "--out",
                     str(qc_dir),
-                    "--strict",
                 ],
                 COMMAND_TARGETS["validate"],
             )

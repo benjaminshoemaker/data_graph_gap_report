@@ -28,6 +28,7 @@ from data_needs_reporter.generate.warehouse import (
     generate_neobank_dims,
     generate_neobank_facts,
     write_empty_warehouse,
+    write_schema_manifest,
     write_warehouse_hash_manifest,
 )
 from data_needs_reporter.report.llm import MockProvider, RepairingLLMClient
@@ -429,6 +430,7 @@ def gen_warehouse_cmd(
                     logger.error("Unsupported archetype %s", archetype)
                 raise typer.Exit(code=1)
 
+        write_schema_manifest(archetype, out)
         write_warehouse_hash_manifest(out, config.warehouse.seed)
         dry_marker = Path(out) / ".dry_run"
         if dry_marker.exists():
@@ -783,7 +785,16 @@ def _run_checks(
             warehouse, tz=getattr(config.warehouse, "tz", None)
         )
         taxonomy_result = validate_taxonomy_targets(warehouse)
-        monetization_result = validate_monetization_targets(warehouse)
+        monetization_cfg = getattr(config.report, "monetization", None)
+        attach_targets = None
+        if monetization_cfg is not None:
+            if hasattr(monetization_cfg, "attach_targets"):
+                attach_targets = getattr(monetization_cfg, "attach_targets", None)
+            elif isinstance(monetization_cfg, Mapping):
+                attach_targets = monetization_cfg.get("attach_targets")
+        monetization_result = validate_monetization_targets(
+            warehouse, attach_targets=attach_targets
+        )
         trajectory_result = validate_trajectory_targets(warehouse)
 
     if mock_comms:
@@ -892,17 +903,39 @@ def _run_checks(
                 "detail": evening_result["detail"],
             }
         )
-        category_caps_cfg = marketplace_cfg.category_caps if marketplace_cfg else None
-        category_result = validate_marketplace_category_caps(
-            warehouse, category_caps=category_caps_cfg
-        )
-        checks.append(
-            {
-                "name": "marketplace_category_caps",
-                "passed": category_result["passed"],
-                "detail": category_result["detail"],
-            }
-        )
+        category_caps_cfg = getattr(marketplace_cfg, "category_caps", None)
+        caps_values: Optional[Mapping[str, float]] = None
+        rollup_caps = False
+        if category_caps_cfg is not None:
+            if hasattr(category_caps_cfg, "values"):
+                caps_values = dict(getattr(category_caps_cfg, "values") or {})
+                rollup_caps = bool(
+                    getattr(category_caps_cfg, "rollup_to_parent", False)
+                )
+            elif isinstance(category_caps_cfg, Mapping):
+                raw_values = category_caps_cfg.get("values")
+                if isinstance(raw_values, Mapping):
+                    caps_values = dict(raw_values)
+                else:
+                    caps_values = {
+                        key: float(value)
+                        for key, value in category_caps_cfg.items()
+                        if isinstance(value, (int, float))
+                    }
+                rollup_caps = bool(category_caps_cfg.get("rollup_to_parent", False))
+        if caps_values:
+            category_result = validate_marketplace_category_caps(
+                warehouse,
+                category_caps=caps_values,
+                rollup_to_parent=rollup_caps,
+            )
+            checks.append(
+                {
+                    "name": "marketplace_category_caps",
+                    "passed": category_result["passed"],
+                    "detail": category_result["detail"],
+                }
+            )
     overall_pass = all(check["passed"] for check in checks)
     return {
         "checks": checks,
@@ -991,11 +1024,15 @@ def validate_cmd(
         issues.append(detail)
 
     aggregates: Mapping[str, object] = {}
+    aggregates_by_table: Mapping[str, object] = {}
     tables_section: object = {}
     if isinstance(data_health_payload, Mapping):
         aggregates_raw = data_health_payload.get("aggregates", {})
         if isinstance(aggregates_raw, Mapping):
             aggregates = aggregates_raw  # type: ignore[assignment]
+        aggregates_by_table_raw = data_health_payload.get("aggregates_by_table", {})
+        if isinstance(aggregates_by_table_raw, Mapping):
+            aggregates_by_table = aggregates_by_table_raw  # type: ignore[assignment]
         tables_section = data_health_payload.get("tables", {})
 
     def _lookup_table(name: str) -> Optional[Mapping[str, object]]:
@@ -1009,6 +1046,11 @@ def validate_cmd(
         return None
 
     invoice_metrics = _lookup_table("fact_subscription_invoice")
+    invoice_aggregate_metrics = None
+    if isinstance(aggregates_by_table, Mapping):
+        entry = aggregates_by_table.get("fact_subscription_invoice")
+        if isinstance(entry, Mapping):
+            invoice_aggregate_metrics = entry
 
     for metric_name, threshold_raw in slo_thresholds.items():
         try:
@@ -1058,6 +1100,63 @@ def validate_cmd(
         )
         if not table_passed:
             issues.append(table_detail)
+
+    invoice_cfg_raw = getattr(config.report, "invoice_aggregates", None)
+    invoice_aggs_enabled = False
+    invoice_slos_cfg: Optional[object] = None
+    if invoice_cfg_raw is not None:
+        if hasattr(invoice_cfg_raw, "enabled"):
+            invoice_aggs_enabled = bool(getattr(invoice_cfg_raw, "enabled", False))
+            invoice_slos_cfg = getattr(invoice_cfg_raw, "slos", None)
+        elif isinstance(invoice_cfg_raw, Mapping):
+            invoice_aggs_enabled = bool(invoice_cfg_raw.get("enabled"))
+            invoice_slos_cfg = invoice_cfg_raw.get("slos")
+
+    invoice_aggregate_thresholds: Mapping[str, float] = slo_thresholds
+    if invoice_slos_cfg is not None:
+        if hasattr(invoice_slos_cfg, "model_dump"):
+            overrides = invoice_slos_cfg.model_dump(exclude_none=True)
+        elif isinstance(invoice_slos_cfg, Mapping):
+            overrides = {k: v for k, v in invoice_slos_cfg.items() if v is not None}
+        else:
+            overrides = {}
+        if overrides:
+            merged = dict(slo_thresholds)
+            for key, value in overrides.items():
+                try:
+                    merged[key] = float(value)
+                except (TypeError, ValueError):
+                    continue
+            invoice_aggregate_thresholds = merged
+
+    if invoice_aggs_enabled and invoice_aggregate_metrics is not None:
+        for metric_name, threshold_raw in invoice_aggregate_thresholds.items():
+            try:
+                threshold = float(threshold_raw)
+            except (TypeError, ValueError):
+                continue
+            agg_value = _extract_metric(invoice_aggregate_metrics, metric_name)
+            agg_passed = agg_value is not None and agg_value <= threshold
+            if agg_value is None:
+                detail = (
+                    f"fact_subscription_invoice aggregate {metric_name} missing in "
+                    f"{data_health_path.name}"
+                )
+            else:
+                detail = (
+                    f"fact_subscription_invoice aggregate {metric_name} "
+                    f"{_format_value(metric_name, agg_value)} "
+                    f"(limit {_format_value(metric_name, threshold)})"
+                )
+            checks.append(
+                {
+                    "name": f"slo.invoice_aggregates.{metric_name}",
+                    "passed": agg_passed,
+                    "detail": detail,
+                }
+            )
+            if not agg_passed:
+                issues.append(detail)
 
     overall_pass = all(check.get("passed", False) for check in checks)
     exit_code = 0 if (overall_pass or not strict) else 1

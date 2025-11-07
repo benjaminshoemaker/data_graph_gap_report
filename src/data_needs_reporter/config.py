@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Mapping, MutableMapping, Optional, Tuple
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 try:
     import yaml  # type: ignore
@@ -62,6 +62,13 @@ class ReportSLOs(BaseModel):
     p95_ingest_lag_min: float
 
 
+class InvoiceAggregatesSLOs(BaseModel):
+    key_null_pct: Optional[float] = None
+    dup_key_pct: Optional[float] = None
+    p95_ingest_lag_min: Optional[float] = None
+    fk_success_pct: Optional[float] = None
+
+
 class MarketplaceEveningWindowConfig(BaseModel):
     start_hour: int = 17
     end_hour: int = 21
@@ -73,7 +80,30 @@ class ReportMarketplaceConfig(BaseModel):
     evening_window: MarketplaceEveningWindowConfig = Field(
         default_factory=MarketplaceEveningWindowConfig
     )
-    category_caps: Optional[Dict[str, float]] = None
+    category_caps: Optional["ReportCategoryCapsConfig"] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_category_caps(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        raw_caps = values.get("category_caps")
+        if isinstance(raw_caps, dict):
+            if "values" not in raw_caps and "rollup_to_parent" not in raw_caps:
+                values["category_caps"] = {"values": raw_caps}
+        return values
+
+
+class ReportCategoryCapsConfig(BaseModel):
+    values: Dict[str, float] = Field(default_factory=dict)
+    rollup_to_parent: bool = False
+
+
+class ReportMonetizationConfig(BaseModel):
+    attach_targets: Dict[str, float] = Field(default_factory=dict)
+
+
+class ReportInvoiceAggregatesConfig(BaseModel):
+    enabled: bool = False
+    slos: Optional[InvoiceAggregatesSLOs] = None
 
 
 class ReportConfig(BaseModel):
@@ -84,6 +114,8 @@ class ReportConfig(BaseModel):
     demand_weight_caps: Dict[str, float]
     revenue_norm: str
     marketplace: Optional[ReportMarketplaceConfig] = None
+    invoice_aggregates: Optional[ReportInvoiceAggregatesConfig] = None
+    monetization: Optional[ReportMonetizationConfig] = None
 
 
 class BudgetConfig(BaseModel):
