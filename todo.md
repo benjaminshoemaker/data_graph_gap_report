@@ -18,6 +18,8 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [x] Cache Poetry and pip
   - [x] Run unit + integration tests
   - [x] Upload coverage
+- [x] Fix CI benchmark summary heredoc indentation
+  - [ ] Monitor the next GitHub Actions run to confirm the summary step executes and renders
 - [x] Makefile/justfile targets
   - [x] `make test`, `make lint`, `make fmt`, `make e2e`
 
