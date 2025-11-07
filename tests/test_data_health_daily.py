@@ -4,9 +4,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-pl = pytest.importorskip("polars")
-
 from data_needs_reporter.report.metrics import compute_data_health
+
+pl = pytest.importorskip("polars")
 
 
 def test_compute_data_health_tracks_daily_metrics(tmp_path):

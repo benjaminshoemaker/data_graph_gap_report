@@ -1372,17 +1372,15 @@ def validate_monetization_targets(
                         tier_field = "_tier"
                         invoices_with_tier = invoices.with_columns(
                             polars.col("tier")
-                                .cast(polars.Utf8)
-                                .str.strip_chars()
-                                .alias("_tier")
+                            .cast(polars.Utf8)
+                            .str.strip_chars()
+                            .alias("_tier")
                         )
                     elif "plan_id" in invoices.columns:
                         plan_path = path / "dim_plan.parquet"
                         if plan_path.exists():
                             try:
-                                plans = _scan_parquet(plan_path).collect(
-                                    streaming=True
-                                )
+                                plans = _scan_parquet(plan_path).collect(streaming=True)
                                 if "tier" in plans.columns:
                                     plan_map = plans.select(
                                         [
@@ -1412,9 +1410,7 @@ def validate_monetization_targets(
                                 polars.col("customer_id")
                                 .cast(polars.Int64)
                                 .alias("customer_id"),
-                                polars.col(tier_field)
-                                .cast(polars.Utf8)
-                                .alias("_tier"),
+                                polars.col(tier_field).cast(polars.Utf8).alias("_tier"),
                             )
                             .drop_nulls(subset=["customer_id", "_tier"])
                             .to_dicts()

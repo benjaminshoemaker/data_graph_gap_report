@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Mapping
-
-import importlib.util
 
 import pytest
 from typer.testing import CliRunner

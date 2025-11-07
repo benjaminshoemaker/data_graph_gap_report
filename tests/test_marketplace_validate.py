@@ -83,7 +83,10 @@ def _write_marketplace_orders_for_coverage(
 
 
 def _write_marketplace_category_fixture(
-    base_path: Path, gmv_by_listing: dict[int, int], *, use_child_categories: bool = False
+    base_path: Path,
+    gmv_by_listing: dict[int, int],
+    *,
+    use_child_categories: bool = False,
 ) -> None:
     base_path.mkdir(parents=True, exist_ok=True)
     tz = timezone.utc

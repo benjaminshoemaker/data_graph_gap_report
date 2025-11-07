@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from data_needs_reporter.report.metrics import validate_monetization_targets
+
 pytest.importorskip("polars")
 import polars as pl  # noqa: E402
-
-from data_needs_reporter.report.metrics import validate_monetization_targets
 
 
 def _write_neobank_with_tiers(
