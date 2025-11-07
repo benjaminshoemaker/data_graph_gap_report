@@ -90,6 +90,11 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Output format for the benchmark summary.",
     )
     parser.add_argument(
+        "--report-file",
+        type=Path,
+        help="Optional path to write the benchmark summary when using JSON output.",
+    )
+    parser.add_argument(
         "--fail-on-budget",
         action="store_true",
         help="Exit with status 1 when any command exceeds its target budget.",
@@ -353,7 +358,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     summary = _summarize_results(results)
     if args.report_format == "json":
-        print(json.dumps(summary, indent=2))
+        summary_text = json.dumps(summary, indent=2)
+        if args.report_file:
+            args.report_file.parent.mkdir(parents=True, exist_ok=True)
+            args.report_file.write_text(summary_text + "\n", encoding="utf-8")
+        print(summary_text)
     else:
         _print_table(results)
 
