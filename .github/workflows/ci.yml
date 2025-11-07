@@ -154,7 +154,7 @@ jobs:
         id: run-bench
         run: |
           set +e
-          poetry run python scripts/bench.py --report-format json > bench.json
+          poetry run python scripts/bench.py --report-format json --report-file bench.json
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
       - name: Show bench output
         if: always()

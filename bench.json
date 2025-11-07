@@ -1,0 +1,41 @@
+{
+  "commands": [
+    {
+      "name": "gen-warehouse",
+      "elapsed_s": 0.3754,
+      "peak_rss_mb": 79.58,
+      "target_s": 3.0,
+      "exit_code": 0,
+      "within_budget": true
+    },
+    {
+      "name": "gen-comms",
+      "elapsed_s": 0.2485,
+      "peak_rss_mb": 68.94,
+      "target_s": 3.5,
+      "exit_code": 0,
+      "within_budget": true
+    },
+    {
+      "name": "run-report",
+      "elapsed_s": 0.2757,
+      "peak_rss_mb": 77.97,
+      "target_s": 2.5,
+      "exit_code": 0,
+      "within_budget": true
+    },
+    {
+      "name": "validate",
+      "elapsed_s": 0.2402,
+      "peak_rss_mb": 74.88,
+      "target_s": 2.0,
+      "exit_code": 1,
+      "within_budget": false
+    }
+  ],
+  "all_within_budget": false,
+  "completed_commands": 4,
+  "max_peak_rss_mb": 79.578125,
+  "total_elapsed_s": 1.1398,
+  "platform": "macOS-15.6.1-arm64-arm-64bit"
+}

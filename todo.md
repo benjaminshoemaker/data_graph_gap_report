@@ -28,6 +28,9 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [x] Allow pip to build the package in isolation by removing the `--no-build-isolation` override
   - [x] Guard the performance benchmark test with a boolean `CI` check so it skips cleanly on runners
   - [ ] Confirm the next CI run executes `pytest` end-to-end
+- [x] Ensure benchmark summaries produce valid JSON artifacts
+  - [x] Add `--report-file` support to `scripts/bench.py` and update CI to use it
+  - [ ] Watch the benchmark job to confirm `bench.json` parses and the summary step renders
 - [x] Makefile/justfile targets
   - [x] `make test`, `make lint`, `make fmt`, `make e2e`
 
