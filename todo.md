@@ -22,6 +22,8 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [ ] Monitor the next GitHub Actions run to confirm the summary step executes and renders
 - [x] Clean up formatting/lint drift flagged by CI
   - [ ] Rerun `pre-commit run --all-files` once the local `os.sysconf('SC_ARG_MAX')` restriction is lifted
+- [x] Regenerate `poetry.lock` after dependency definition tweaks
+  - [ ] Kick CI again to confirm `poetry install` no longer errors on macOS runner
 - [x] Makefile/justfile targets
   - [x] `make test`, `make lint`, `make fmt`, `make e2e`
 
