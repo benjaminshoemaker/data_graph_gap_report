@@ -337,7 +337,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 - [x] End‑to‑end smoke test
   - [x] init → gen‑warehouse(neobank) → gen‑comms(neobank with mock LLM) → run‑report → validate --strict
 - [x] Golden snapshots for `data_health.json`, `themes.json` structure, and figure hashes
-- [ ] Tag `v0.1.0`
+- [x] Tag `v0.1.2`
 
 **Done when:** e2e test green; artifacts produced; tag pushed.
 
