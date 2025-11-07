@@ -23,6 +23,35 @@ Optional dependencies such as `polars` are automatically installed through the
 default Poetry lockfile. If you encounter missing wheels on your platform,
 install them manually inside the Poetry environment.
 
+## Local Setup
+
+Follow this quick routine before you start a dev session:
+
+1. Install or refresh dependencies inside the Poetry environment:
+   ```bash
+   poetry install
+   ```
+2. Format imports and code to match CI:
+   ```bash
+   make fmt
+   ```
+3. Run the linters (`ruff`, `black`, `isort`) via:
+   ```bash
+   make lint
+   ```
+4. Execute the full test suite:
+   ```bash
+   make test
+   ```
+5. When touching snapshot expectations under `tests/goldens/`, regenerate them
+   deterministically:
+   ```bash
+   UPDATE_GOLDENS=1 poetry run pytest tests/test_end_to_end.py
+   ```
+
+These steps mirror the CI pipeline, so keeping them green locally avoids churn
+in preflight checks.
+
 ## Tooling Overview
 
 - **Poetry** manages dependencies, virtualenvs, and packaging metadata.

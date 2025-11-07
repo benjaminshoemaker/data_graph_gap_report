@@ -149,9 +149,9 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 7. Metrics Engine + Plots
 
-- [ ] Compute per-table:
-  - [ ] key_null_pct, fk_success_pct, orphan_pct, dup_key_pct, p95_ingest_lag_min
-  - [ ] Null spike detection (daily vs 7-day median +8.0)
+- [x] Compute per-table:
+  - [x] key_null_pct, fk_success_pct, orphan_pct, dup_key_pct, p95_ingest_lag_min
+  - [x] Null spike detection (daily vs 7-day median +8.0)
 - [x] SLO check using config thresholds
 - [x] Validate quality targets in `validate` gate (merchant key null, card orphan, txn dup, txn lag)
   - [ ] Extend coverage to invoice aggregates when targets finalize
@@ -172,8 +172,8 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 8. Classification
 
-- [x] Role‑aware thread packing (root + all execs + top‑scored newest→oldest)
-  - [ ] Caps: ≤900 input tokens, ≤20 messages
+- [x] Role-aware thread packing (root + all execs + top-scored newest→oldest)
+  - [x] Caps: ≤900 input tokens, ≤20 messages
 - [x] LLM classify
   - [x] Slack/Email: theme + relevance
   - [x] NLQ: theme only
@@ -201,11 +201,11 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 10. Demand, Revenue, Severity, Recency
 
-- [ ] Demand
+- [x] Demand
   - [x] Post‑stratified per item weights
   - [x] Source weights base: NLQ 0.50, Slack 0.30, Email 0.20
   - [x] Reweight by volume; cap per source to [0.15, 0.60]
-- [ ] Revenue impact
+- [x] Revenue impact
   - [x] Neobank: Interchange + Subs at risk
   - [x] Marketplace: Net revenue at risk
   - [x] Normalize by trailing 3‑month median monthly revenue
