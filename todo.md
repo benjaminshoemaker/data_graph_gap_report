@@ -278,13 +278,13 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 16. Performance + Memory
 
-- [ ] Ensure Evaluation budgets on 4‑core laptop
-  - [ ] `gen-warehouse` ≤ 3 min/archetype
-  - [ ] `gen-comms` ≤ 4 min/archetype
-  - [ ] `run-report` ≤ 5 min/archetype
-  - [ ] `validate` ≤ 3 min/archetype
-  - [ ] Peak RAM ≤ 4 GB
-- [ ] Add simple benchmark script and CI timing guard (informational)
+- [x] Ensure Evaluation budgets on 4‑core laptop
+  - [x] `gen-warehouse` ≤ 3 min/archetype
+  - [x] `gen-comms` ≤ 4 min/archetype
+  - [x] `run-report` ≤ 5 min/archetype
+  - [x] `validate` ≤ 3 min/archetype
+  - [x] Peak RAM ≤ 4 GB
+- [x] Add simple benchmark script and CI timing guard (informational)
 
 **Done when:** local benchmark meets targets.
 

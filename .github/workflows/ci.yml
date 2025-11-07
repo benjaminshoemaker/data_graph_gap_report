@@ -132,3 +132,69 @@ jobs:
           total=$((now - JOB_START))
           printf 'Total job duration: %ss\n' "$total"
           printf '| Overall | %s |\n' "$total" >> "$GITHUB_STEP_SUMMARY"
+
+  benchmarks:
+    needs: checks
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      POETRY_VIRTUALENVS_IN_PROJECT: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+      - name: Install project
+        run: poetry install
+      - name: Run bench script
+        id: run-bench
+        run: |
+          set +e
+          poetry run python scripts/bench.py --report-format json > bench.json
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+      - name: Show bench output
+        if: always()
+        run: |
+          if [[ -f bench.json ]]; then
+            cat bench.json
+          else
+            echo "bench.json missing"
+          fi
+      - name: Summarize benchmarks
+        if: always()
+        run: |
+          python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+summary_path = Path("bench.json")
+if not summary_path.exists():
+    print("bench.json not found; skipping summary")
+    raise SystemExit(0)
+
+payload = json.loads(summary_path.read_text(encoding="utf-8"))
+lines = [
+    "## Benchmark Budget Check",
+    "",
+    "| Command | Seconds | Target | Peak RSS (MB) | Status |",
+    "| --- | --- | --- | --- | --- |",
+]
+for cmd in payload.get("commands", []):
+    rss = cmd.get("peak_rss_mb")
+    rss_display = f"{rss:.1f}" if isinstance(rss, (int, float)) else "n/a"
+    status = "ok" if cmd.get("within_budget") else ("slow" if cmd.get("exit_code") == 0 else "fail")
+    lines.append(
+        f"| {cmd.get('name')} | {cmd.get('elapsed_s', 0.0):.2f} | "
+        f"{cmd.get('target_s', 0.0):.2f} | {rss_display} | {status} |"
+    )
+lines.append("")
+lines.append(f"All commands within budget: {payload.get('all_within_budget')}")
+
+with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+    fh.write("\n".join(lines) + "\n")
+PY

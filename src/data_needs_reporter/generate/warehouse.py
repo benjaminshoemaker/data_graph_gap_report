@@ -404,11 +404,11 @@ def generate_neobank_facts(
     rng = random.Random((seed if seed is not None else cfg.warehouse.seed) + 7)
 
     dims_path = Path(dims_dir)
-    cards_df = polars.read_parquet(dims_path / "dim_card.parquet")
-    accounts_df = polars.read_parquet(dims_path / "dim_account.parquet")
-    customers_df = polars.read_parquet(dims_path / "dim_customer.parquet")
-    merchants_df = polars.read_parquet(dims_path / "dim_merchant.parquet")
-    plans_df = polars.read_parquet(dims_path / "dim_plan.parquet")
+    cards_df = _collect_parquet(dims_path / "dim_card.parquet")
+    accounts_df = _collect_parquet(dims_path / "dim_account.parquet")
+    customers_df = _collect_parquet(dims_path / "dim_customer.parquet")
+    merchants_df = _collect_parquet(dims_path / "dim_merchant.parquet")
+    plans_df = _collect_parquet(dims_path / "dim_plan.parquet")
 
     account_type_lookup = {
         int(row["account_id"]): row["type"] for row in accounts_df.to_dicts()
@@ -729,9 +729,9 @@ def generate_marketplace_facts(
     rng = random.Random((seed if seed is not None else cfg.warehouse.seed) + 211)
 
     dims_path = Path(dims_dir)
-    buyers_df = polars.read_parquet(dims_path / "dim_buyer.parquet")
-    sellers_df = polars.read_parquet(dims_path / "dim_seller.parquet")
-    listings_df = polars.read_parquet(dims_path / "dim_listing.parquet")
+    buyers_df = _collect_parquet(dims_path / "dim_buyer.parquet")
+    sellers_df = _collect_parquet(dims_path / "dim_seller.parquet")
+    listings_df = _collect_parquet(dims_path / "dim_listing.parquet")
 
     buyer_ids = [int(b) for b in buyers_df["buyer_id"]]
     sellers = [dict(row) for row in sellers_df.to_dicts()]
@@ -911,6 +911,14 @@ def _ensure_polars():
             "Install it to enable this feature."
         )
     return pl
+
+
+def _collect_parquet(path: Path, columns: list[str] | None = None):
+    polars = _ensure_polars()
+    lazy_frame = polars.scan_parquet(str(path))
+    if columns:
+        lazy_frame = lazy_frame.select([polars.col(col) for col in columns])
+    return lazy_frame.collect(streaming=True)
 
 
 __all__ = [

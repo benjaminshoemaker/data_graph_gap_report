@@ -18,6 +18,14 @@ from data_needs_reporter.generate.warehouse import (
 from data_needs_reporter.utils.io import write_json_atomic
 
 
+def _collect_parquet(path: Path, columns: list[str] | None = None):
+    polars = _ensure_polars()
+    lazy_frame = polars.scan_parquet(str(path))
+    if columns:
+        lazy_frame = lazy_frame.select([polars.col(col) for col in columns])
+    return lazy_frame.collect(streaming=True)
+
+
 def inject_key_nulls(df, columns: Sequence[str], rate_pct: float, rng: random.Random):
     polars = _ensure_polars()
     if df.height == 0 or rate_pct <= 0:
@@ -202,9 +210,9 @@ def apply_typical_neobank_defects(
     rng = random.Random((seed if seed is not None else cfg.warehouse.seed) + 333)
 
     out_path = Path(out_dir)
-    txn_df = polars.read_parquet(out_path / "fact_card_transaction.parquet")
-    invoice_df = polars.read_parquet(out_path / "fact_subscription_invoice.parquet")
-    card_df = polars.read_parquet(out_path / "dim_card.parquet")
+    txn_df = _collect_parquet(out_path / "fact_card_transaction.parquet")
+    invoice_df = _collect_parquet(out_path / "fact_subscription_invoice.parquet")
+    card_df = _collect_parquet(out_path / "dim_card.parquet")
 
     txn_df = inject_key_nulls(txn_df, ["merchant_id"], 2.0, rng)
     txn_df = inject_fk_failures(
@@ -409,9 +417,8 @@ def apply_typical_marketplace_defects(
     polars = _ensure_polars()
     rng = random.Random((seed if seed is not None else cfg.warehouse.seed) + 555)
     out_path = Path(out_dir)
-
-    orders_df = polars.read_parquet(out_path / "fact_order.parquet")
-    payments_df = polars.read_parquet(out_path / "fact_payment.parquet")
+    orders_df = _collect_parquet(out_path / "fact_order.parquet")
+    payments_df = _collect_parquet(out_path / "fact_payment.parquet")
 
     orders_df = inject_key_nulls(orders_df, ["buyer_id"], 1.5, rng)
     orders_df = inject_duplicates(orders_df, "order_id", 0.5, rng)

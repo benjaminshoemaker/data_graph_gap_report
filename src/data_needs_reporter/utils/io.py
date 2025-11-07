@@ -52,7 +52,8 @@ def write_parquet_atomic(path: PathLike, dataframe: PolarsDataFrame) -> None:
 
 def read_parquet(path: PathLike):
     _ensure_polars()
-    return pl.read_parquet(path)
+    target = Path(path)
+    return pl.scan_parquet(str(target)).collect(streaming=True)
 
 
 def write_csv_atomic(path: PathLike, dataframe: PolarsDataFrame) -> None:
