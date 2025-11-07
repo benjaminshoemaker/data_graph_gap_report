@@ -4,7 +4,7 @@ import json
 import os
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Mapping
 
 import pytest
 from typer.testing import CliRunner
@@ -37,9 +37,7 @@ def _normalize_data_health_tables(
             "dup_key_pct": float(
                 metrics.get("dup_key_pct", metrics.get("dup_keys_pct", 0.0) or 0.0)
             ),
-            "p95_ingest_lag_min": float(
-                metrics.get("p95_ingest_lag_min", 0.0) or 0.0
-            ),
+            "p95_ingest_lag_min": float(metrics.get("p95_ingest_lag_min", 0.0) or 0.0),
             "row_count": int(metrics.get("row_count", 0) or 0),
             "key_null_spikes": metrics.get(
                 "key_null_spikes", metrics.get("null_spike_days", [])
@@ -196,7 +194,9 @@ def test_end_to_end_pipeline(tmp_path: Path) -> None:
                 data_health.get("tables")
             ) == _normalize_data_health_tables(expected_data_health.get("tables"))
             if "aggregates" in expected_data_health:
-                assert data_health.get("aggregates") == expected_data_health["aggregates"]
+                assert (
+                    data_health.get("aggregates") == expected_data_health["aggregates"]
+                )
             else:
                 assert "aggregates" in data_health
             assert themes == expected_themes

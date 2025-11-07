@@ -111,7 +111,9 @@ def _run_labels_evaluation(
     predictions: Any,
     labels_dir: Path,
     pl_module: Any,
-) -> tuple[dict[str, object], list[dict[str, object]], dict[str, dict[str, dict[str, int]]]]:
+) -> tuple[
+    dict[str, object], list[dict[str, object]], dict[str, dict[str, dict[str, int]]]
+]:
     pl = pl_module
     summary_sources: dict[str, object] = {}
     per_class_rows: list[dict[str, object]] = []
@@ -668,6 +670,7 @@ def run_report_cmd(
         {"day": "2024-01-02", "orphan_pct": 2.5},
         {"day": "2024-01-03", "orphan_pct": 2.1},
     ]
+
     def _aggregate_daily(
         rows: Sequence[Mapping[str, object]],
         metric_key: str,
@@ -711,9 +714,24 @@ def run_report_cmd(
     plot_dup_key_pct_bar(dup_by_table, figures_dir / "dup_key_pct_bar.png")
     plot_theme_demand_monthly(
         [
-            {"month": "2023-11", "data_quality": 0.40, "pipeline_health": 0.35, "governance": 0.25},
-            {"month": "2023-12", "data_quality": 0.45, "pipeline_health": 0.32, "governance": 0.23},
-            {"month": "2024-01", "data_quality": 0.50, "pipeline_health": 0.30, "governance": 0.20},
+            {
+                "month": "2023-11",
+                "data_quality": 0.40,
+                "pipeline_health": 0.35,
+                "governance": 0.25,
+            },
+            {
+                "month": "2023-12",
+                "data_quality": 0.45,
+                "pipeline_health": 0.32,
+                "governance": 0.23,
+            },
+            {
+                "month": "2024-01",
+                "data_quality": 0.50,
+                "pipeline_health": 0.30,
+                "governance": 0.20,
+            },
         ],
         figures_dir / "theme_demand_monthly.png",
     )
@@ -874,9 +892,7 @@ def _run_checks(
                 "detail": evening_result["detail"],
             }
         )
-        category_caps_cfg = (
-            marketplace_cfg.category_caps if marketplace_cfg else None
-        )
+        category_caps_cfg = marketplace_cfg.category_caps if marketplace_cfg else None
         category_result = validate_marketplace_category_caps(
             warehouse, category_caps=category_caps_cfg
         )
@@ -966,9 +982,7 @@ def validate_cmd(
             )
         except json.JSONDecodeError as exc:
             detail = f"Unable to parse {data_health_path}: {exc}"
-            checks.append(
-                {"name": "data_health", "passed": False, "detail": detail}
-            )
+            checks.append({"name": "data_health", "passed": False, "detail": detail})
             issues.append(detail)
             data_health_payload = None
     else:
@@ -990,10 +1004,7 @@ def validate_cmd(
             return table_entry if isinstance(table_entry, Mapping) else None
         if isinstance(tables_section, list):
             for entry in tables_section:
-                if (
-                    isinstance(entry, Mapping)
-                    and str(entry.get("table")) == name
-                ):
+                if isinstance(entry, Mapping) and str(entry.get("table")) == name:
                     return entry
         return None
 
@@ -1030,9 +1041,7 @@ def validate_cmd(
             table_detail = "fact_subscription_invoice metrics missing"
             table_passed = False
         elif table_value is None:
-            table_detail = (
-                f"fact_subscription_invoice missing {metric_name} metric"
-            )
+            table_detail = f"fact_subscription_invoice missing {metric_name} metric"
             table_passed = False
         else:
             table_detail = (
@@ -1087,8 +1096,12 @@ def validate_cmd(
 @app.command("eval-labels")
 def eval_labels_cmd(
     ctx: typer.Context,
-    preds: Path = typer.Option(..., "--pred", help="Directory with prediction parquet files."),
-    labels: Path = typer.Option(..., "--labels", help="Directory containing oracle label parquet files."),
+    preds: Path = typer.Option(
+        ..., "--pred", help="Directory with prediction parquet files."
+    ),
+    labels: Path = typer.Option(
+        ..., "--labels", help="Directory containing oracle label parquet files."
+    ),
     out: Path = typer.Option(..., "--out", help="Evaluation report output directory."),
     strict: bool = typer.Option(
         False,

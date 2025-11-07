@@ -7,11 +7,14 @@ import pytest
 pytest.importorskip("duckdb")
 pl = pytest.importorskip("polars")
 
+# isort: off
 from data_needs_reporter.utils.duck import (  # noqa: E402
     attach_parquet_dir,
     open_db,
     safe_query,
 )
+
+# isort: on
 from data_needs_reporter.utils.io import write_parquet_atomic  # noqa: E402
 
 

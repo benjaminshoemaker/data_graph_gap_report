@@ -7,6 +7,7 @@ from typing import Sequence
 import pytest
 from typer.testing import CliRunner
 
+import data_needs_reporter.report.metrics as metrics_mod
 from data_needs_reporter.cli import app
 from data_needs_reporter.config import DEFAULT_CONFIG_PATH, load_config
 from data_needs_reporter.generate.comms import (
@@ -25,7 +26,6 @@ from data_needs_reporter.generate.warehouse import (
     generate_neobank_facts,
     write_empty_warehouse,
 )
-import data_needs_reporter.report.metrics as metrics_mod
 from data_needs_reporter.report.llm import MockProvider, RepairingLLMClient
 from data_needs_reporter.report.metrics import validate_comms_targets
 from data_needs_reporter.utils.cost_guard import CostGuard

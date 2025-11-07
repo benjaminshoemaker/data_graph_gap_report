@@ -131,9 +131,7 @@ def _write_marketplace_category_fixture(
                 "loaded_at": datetime(2024, 1, 2, tzinfo=tz),
             }
         )
-    pl.DataFrame(order_item_rows).write_parquet(
-        base_path / "fact_order_item.parquet"
-    )
+    pl.DataFrame(order_item_rows).write_parquet(base_path / "fact_order_item.parquet")
 
 
 def test_evening_coverage_pass(tmp_path: Path) -> None:
@@ -174,9 +172,7 @@ def test_evening_coverage_fail(tmp_path: Path) -> None:
 
 def test_category_caps_pass(tmp_path: Path) -> None:
     warehouse = tmp_path / "caps_pass"
-    _write_marketplace_category_fixture(
-        warehouse, {1: 40_000, 2: 35_000, 3: 25_000}
-    )
+    _write_marketplace_category_fixture(warehouse, {1: 40_000, 2: 35_000, 3: 25_000})
     result = validate_marketplace_category_caps(
         warehouse, category_caps={"Home": 0.5, "Art": 0.5}
     )
@@ -186,11 +182,7 @@ def test_category_caps_pass(tmp_path: Path) -> None:
 
 def test_category_caps_fail(tmp_path: Path) -> None:
     warehouse = tmp_path / "caps_fail"
-    _write_marketplace_category_fixture(
-        warehouse, {1: 70_000, 2: 20_000, 3: 10_000}
-    )
-    result = validate_marketplace_category_caps(
-        warehouse, category_caps={"Home": 0.4}
-    )
+    _write_marketplace_category_fixture(warehouse, {1: 70_000, 2: 20_000, 3: 10_000})
+    result = validate_marketplace_category_caps(warehouse, category_caps={"Home": 0.4})
     assert result["passed"] is False
     assert "exceeds cap" in result["detail"]

@@ -70,7 +70,9 @@ class LLMClient:
         guard: Optional[CostGuard] = None,
         channel: Optional[str] = None,
     ) -> Dict[str, Any]:
-        cache_path = self._cache_path(prompt, temperature) if self.cache_enabled else None
+        cache_path = (
+            self._cache_path(prompt, temperature) if self.cache_enabled else None
+        )
         cached = self._read_cache(cache_path)
         if cached is not None:
             return cached
@@ -117,9 +119,7 @@ class LLMClient:
         try:
             guard.consume(tokens, channel=channel_name)
         except BudgetExceededError as exc:
-            raise LLMError(
-                f"LLM budget exceeded for channel '{channel_name}'"
-            ) from exc
+            raise LLMError(f"LLM budget exceeded for channel '{channel_name}'") from exc
 
     def _estimate_total_tokens(self, prompt: str) -> int:
         if not prompt:
@@ -175,7 +175,9 @@ class RepairingLLMClient(LLMClient):
         guard: Optional[CostGuard] = None,
         channel: Optional[str] = None,
     ) -> Dict[str, Any]:
-        cache_path = self._cache_path(prompt, temperature) if self.cache_enabled else None
+        cache_path = (
+            self._cache_path(prompt, temperature) if self.cache_enabled else None
+        )
         cached = self._read_cache(cache_path)
         if cached is not None:
             return cached
@@ -186,9 +188,7 @@ class RepairingLLMClient(LLMClient):
             attempts += 1
             try:
                 prompt_variant = (
-                    prompt
-                    if attempts == 1
-                    else f"{prompt}\nRespond with STRICT JSON."
+                    prompt if attempts == 1 else f"{prompt}\nRespond with STRICT JSON."
                 )
                 parsed = self._invoke_provider(
                     prompt_variant, temperature, guard, channel

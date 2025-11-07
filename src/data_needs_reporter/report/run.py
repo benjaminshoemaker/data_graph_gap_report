@@ -20,8 +20,8 @@ from data_needs_reporter.report.scoring import (
     ScoringWeights,
     compute_confidence,
     compute_score,
-    compute_source_demand_weights,
     compute_severity,
+    compute_source_demand_weights,
     normalize_revenue,
     select_top_actions,
 )
@@ -46,10 +46,12 @@ DEFAULT_DEMAND_WEIGHTS: Dict[str, float] = {
 }
 SUMMARY_MAX_LEN = 160
 
+
 def _require_polars() -> "pl":
     if pl is None:  # pragma: no cover
         raise RuntimeError("polars is required for entity extraction pipeline.")
     return pl
+
 
 def _collect_positive_ids(
     predictions_df: Optional["pl.DataFrame"],
@@ -322,7 +324,9 @@ def _build_predictions(
 
     if slack_df is not None and slack_df.height > 0:
         for row in slack_df.to_dicts():
-            theme = str(_get_row_value(row, "bucket", "theme", "intent") or "data_quality")
+            theme = str(
+                _get_row_value(row, "bucket", "theme", "intent") or "data_quality"
+            )
             timestamp = _ensure_datetime(
                 _get_row_value(row, "sent_at", "ts", "loaded_at", "created_at")
             )
@@ -376,16 +380,10 @@ def _build_predictions(
                 tokens=tokens,
             )
 
-    return [
-        entry
-        for entry in predictions
-        if entry["theme"] and entry["text"]
-    ]
+    return [entry for entry in predictions if entry["theme"] and entry["text"]]
 
 
-def _aggregate_theme_stats(
-    predictions: Sequence[Mapping[str, Any]]
-) -> Tuple[
+def _aggregate_theme_stats(predictions: Sequence[Mapping[str, Any]]) -> Tuple[
     Dict[str, Dict[str, Any]],
     Counter,
 ]:
@@ -487,7 +485,11 @@ def _normalize_tables_payload(tables: object) -> Dict[str, Mapping[str, Any]]:
     if isinstance(tables, Mapping):
         iterator = tables.items()
     elif isinstance(tables, list):
-        iterator = [(entry.get("table"), entry) for entry in tables if isinstance(entry, Mapping)]
+        iterator = [
+            (entry.get("table"), entry)
+            for entry in tables
+            if isinstance(entry, Mapping)
+        ]
     else:
         iterator = []
     for name, metrics in iterator:
@@ -511,9 +513,7 @@ def _compute_table_severity_map(
             "dup_keys_pct": float(
                 metrics.get("dup_keys_pct", metrics.get("dup_key_pct", 0.0)) or 0.0
             ),
-            "p95_ingest_lag_min": float(
-                metrics.get("p95_ingest_lag_min", 0.0) or 0.0
-            ),
+            "p95_ingest_lag_min": float(metrics.get("p95_ingest_lag_min", 0.0) or 0.0),
         }
         severity[table] = compute_severity(overages, slos)
     return severity
@@ -611,14 +611,14 @@ def _assemble_actions(
         severity_values = [
             table_severity.get(table, global_severity) for table in theme_tables
         ]
-        severity_score = (
-            max(severity_values) if severity_values else global_severity
-        )
+        severity_score = max(severity_values) if severity_values else global_severity
         revenue_values = [
             table_revenue.get(table, global_revenue) for table in theme_tables
         ]
         revenue_score = (
-            sum(revenue_values) / len(revenue_values) if revenue_values else global_revenue
+            sum(revenue_values) / len(revenue_values)
+            if revenue_values
+            else global_revenue
         )
         demand_score = demand_scores.get(theme, 0.0)
         recency = recency_scores.get(theme, 0.0)
@@ -642,9 +642,7 @@ def _assemble_actions(
             for example in stats["examples"][:2]
         ]
         summary = (
-            examples[0]["text"]
-            if examples
-            else "No recent demand examples available."
+            examples[0]["text"] if examples else "No recent demand examples available."
         )
 
         actions.append(
@@ -796,7 +794,9 @@ def write_exec_summary(
         exec_md_lines.append(line)
         if action["examples"]:
             exec_md_lines.append(f"   e.g., {action['examples'][0]['text']}")
-    (out_dir / "exec_summary.md").write_text("\n\n".join(exec_md_lines), encoding="utf-8")
+    (out_dir / "exec_summary.md").write_text(
+        "\n\n".join(exec_md_lines), encoding="utf-8"
+    )
     return exec_summary
 
 

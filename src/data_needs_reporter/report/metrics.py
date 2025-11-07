@@ -10,7 +10,8 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 try:  # pragma: no cover - optional dependency
     import polars as pl
-    from polars.datatypes import Date as PlDate, Datetime as PlDatetime
+    from polars.datatypes import Date as PlDate
+    from polars.datatypes import Datetime as PlDatetime
 except ImportError:  # pragma: no cover
     pl = None  # type: ignore[assignment]
     PlDate = None  # type: ignore[assignment]
@@ -908,9 +909,8 @@ def validate_marketplace_evening_coverage(
         return {"passed": False, "issues": issues, "detail": detail}
 
     cutoff = max_day - timedelta(days=max(window_days - 1, 0))
-    window_df = (
-        daily_df.filter(polars.col("_local_day") >= polars.lit(cutoff))
-        .filter(polars.col("total_events") > 0)
+    window_df = daily_df.filter(polars.col("_local_day") >= polars.lit(cutoff)).filter(
+        polars.col("total_events") > 0
     )
 
     if window_df.height == 0:
@@ -919,9 +919,9 @@ def validate_marketplace_evening_coverage(
         return {"passed": False, "issues": issues, "detail": detail}
 
     window_df = window_df.with_columns(
-        (
-            polars.col("evening_events") / polars.col("total_events") * 100.0
-        ).alias("evening_pct")
+        (polars.col("evening_events") / polars.col("total_events") * 100.0).alias(
+            "evening_pct"
+        )
     )
 
     total_days = window_df.height
@@ -987,7 +987,9 @@ def validate_marketplace_category_caps(
         return {"passed": False, "issues": [detail], "detail": detail}
 
     if categories.height == 0 or listings.height == 0 or order_items.height == 0:
-        detail = "Marketplace taxonomy tables contain no data for category caps validation."
+        detail = (
+            "Marketplace taxonomy tables contain no data for category caps validation."
+        )
         return {"passed": False, "issues": [detail], "detail": detail}
 
     required_category_cols = {"category_id", "parent_id"}
@@ -999,7 +1001,11 @@ def validate_marketplace_category_caps(
         categories = categories.with_columns(
             polars.col("category_id")
             .cast(polars.Int64)
-            .apply(lambda val: f"category_{int(val)}" if val is not None else "category_unknown")
+            .apply(
+                lambda val: (
+                    f"category_{int(val)}" if val is not None else "category_unknown"
+                )
+            )
             .alias("name")
         )
 
@@ -1026,7 +1032,9 @@ def validate_marketplace_category_caps(
         for row in category_records
     }
     name_map: Dict[int, str] = {
-        int(row["category_id"]): str(row.get("name") or f"category_{row['category_id']}")
+        int(row["category_id"]): str(
+            row.get("name") or f"category_{row['category_id']}"
+        )
         for row in category_records
     }
 
@@ -1128,9 +1136,7 @@ def validate_marketplace_category_caps(
 
     gmv_by_category = gmv_by_category.join(
         top_name_df, on="top_category_id", how="left"
-    ).with_columns(
-        (polars.col("gmv_cents") / polars.lit(total_gmv)).alias("share")
-    )
+    ).with_columns((polars.col("gmv_cents") / polars.lit(total_gmv)).alias("share"))
 
     share_map: Dict[int, float] = {
         int(cat_id): float(share)
@@ -1195,9 +1201,7 @@ def validate_marketplace_category_caps(
             share_pct = share_map.get(cat_id, 0.0) * 100.0
             detail_parts.append(f"{name}={share_pct:.1f}% (cap {limit * 100:.1f}%)")
         detail = (
-            "Category caps satisfied ("
-            + ", ".join(detail_parts)
-            + ")."
+            "Category caps satisfied (" + ", ".join(detail_parts) + ")."
             if detail_parts
             else "Category caps satisfied."
         )
@@ -1397,9 +1401,7 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
     txn_path = path / "fact_card_transaction.parquet"
 
     missing = [
-        str(p.name)
-        for p in [customer_path, invoice_path, txn_path]
-        if not p.exists()
+        str(p.name) for p in [customer_path, invoice_path, txn_path] if not p.exists()
     ]
     if missing:
         detail = f"Missing required trajectory tables: {', '.join(missing)}."
@@ -1526,7 +1528,9 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
     else:
         negative_rows = transactions.filter(polars.col("amount_cents") < 0).height
         if negative_rows > 0:
-            issues.append("Negative transaction amounts detected; GMV cannot be negative.")
+            issues.append(
+                "Negative transaction amounts detected; GMV cannot be negative."
+            )
             gmv_issue_found = True
         else:
             daily_gmv = (
@@ -1563,9 +1567,7 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
                 if prev_value is not None:
                     if prev_value <= 0.0:
                         if gmv_value > 0.0 and (day_date not in event_days):
-                            label = (
-                                day_date.isoformat() if day_date else str(day_value)
-                            )
+                            label = day_date.isoformat() if day_date else str(day_value)
                             issues.append(
                                 f"GMV jumped from zero to {gmv_value:.2f} cents on {label} without an event marker."
                             )
@@ -1573,13 +1575,8 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
                             break
                     else:
                         ratio = gmv_value / prev_value if prev_value else float("inf")
-                        if (
-                            ratio > TRAJECTORY_MAX_JUMP
-                            and (day_date not in event_days)
-                        ):
-                            label = (
-                                day_date.isoformat() if day_date else str(day_value)
-                            )
+                        if ratio > TRAJECTORY_MAX_JUMP and (day_date not in event_days):
+                            label = day_date.isoformat() if day_date else str(day_value)
                             issues.append(
                                 f"GMV spike {ratio:.2f}× on {label} exceeds {TRAJECTORY_MAX_JUMP:.1f}× "
                                 f"(mark the day in {TRAJECTORY_EVENT_FILE} to allow known events)."
@@ -1631,9 +1628,7 @@ def validate_comms_targets(comms_path: Path) -> Dict[str, object]:
         else:
             detail_parts.append(f"{filename}={volume}")
 
-        source_name = COMMS_SOURCE_NAMES.get(
-            filename, filename.rsplit(".", 1)[0]
-        )
+        source_name = COMMS_SOURCE_NAMES.get(filename, filename.rsplit(".", 1)[0])
 
         if "thread_id" in data.columns:
             total_threads += data.select(polars.col("thread_id")).n_unique()
@@ -2443,7 +2438,9 @@ def _load_trajectory_event_days(base_path: Path) -> Set[date]:
                 event_days.add(timestamp.date())
 
         if isinstance(entries, Mapping):
-            _try_add(entries.get("timestamp") or entries.get("day") or entries.get("date"))
+            _try_add(
+                entries.get("timestamp") or entries.get("day") or entries.get("date")
+            )
         elif isinstance(entries, Sequence):
             for entry in entries:
                 if isinstance(entry, Mapping):
@@ -2467,9 +2464,7 @@ def _detect_schema_gap_event(polars, table_path: Path) -> Optional[Dict[str, obj
     if not table_path.exists():
         return None
     try:
-        df = _scan_parquet(table_path, columns=["event_time"]).collect(
-            streaming=True
-        )
+        df = _scan_parquet(table_path, columns=["event_time"]).collect(streaming=True)
     except Exception:  # pragma: no cover - unreadable file
         return None
     if df.height < SCHEMA_GAP_MIN_ROWS or "event_time" not in df.columns:
@@ -2897,9 +2892,7 @@ def compute_data_health(warehouse_dir: Path, tz: str) -> Dict[str, object]:
                     spikes = []
                     if len(key_null_daily) > 1:
                         spike_window = min(7, max(1, len(key_null_daily) - 1))
-                        spikes = detect_null_spikes(
-                            key_null_daily, window=spike_window
-                        )
+                        spikes = detect_null_spikes(key_null_daily, window=spike_window)
                     if spikes:
                         table_metrics["key_null_spikes"] = spikes
 
@@ -2907,7 +2900,9 @@ def compute_data_health(warehouse_dir: Path, tz: str) -> Dict[str, object]:
         pk_unique_expr = build_pk_unique_expr("_unique_pk")
         if pk_unique_expr is not None and row_count:
             unique_df = lf.select(pk_unique_expr).collect()
-            unique_rows = int(unique_df["_unique_pk"][0] or 0) if unique_df.height else 0
+            unique_rows = (
+                int(unique_df["_unique_pk"][0] or 0) if unique_df.height else 0
+            )
             duplicate_rows = max(float(row_count - unique_rows), 0.0)
             table_metrics["dup_key_pct"] = _pct(duplicate_rows, row_count)
             if day_expr is not None:
@@ -3006,9 +3001,7 @@ def compute_data_health(warehouse_dir: Path, tz: str) -> Dict[str, object]:
 
         table_fk_orphans = max(table_fk_attempts - table_fk_matches, 0)
         if table_fk_attempts:
-            table_metrics["fk_success_pct"] = _pct(
-                table_fk_matches, table_fk_attempts
-            )
+            table_metrics["fk_success_pct"] = _pct(table_fk_matches, table_fk_attempts)
             table_metrics["orphan_pct"] = _pct(table_fk_orphans, table_fk_attempts)
         else:
             table_metrics["fk_success_pct"] = 100.0
