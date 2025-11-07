@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import polars as pl
 from typer.testing import CliRunner
 
@@ -126,7 +127,7 @@ def _build_predictions(
     return preds_dir
 
 
-def test_eval_labels_cli_pass(tmp_path: Path) -> None:
+def test_eval_labels_cli_strict_pass(tmp_path: Path) -> None:
     preds_dir = _build_predictions(tmp_path)
     out_base = tmp_path / "reports" / "eval"
     result = runner.invoke(
@@ -139,6 +140,7 @@ def test_eval_labels_cli_pass(tmp_path: Path) -> None:
             str(Path("meta")),
             "--out",
             str(out_base),
+            "--strict",
         ],
     )
     assert result.exit_code == 0, result.stdout
@@ -147,13 +149,44 @@ def test_eval_labels_cli_pass(tmp_path: Path) -> None:
     out_dir = run_dirs[0]
     summary = json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["gates_pass"] is True
+    slack_theme = summary["sources"]["slack"]["theme"]["overall"]
+    assert slack_theme["accuracy"] == pytest.approx(1.0)
+    assert summary["sources"]["slack"]["coverage"] == pytest.approx(1.0)
+    macro_ci = summary["overall"]["ci"]["macro_f1"]
+    assert isinstance(macro_ci, list) and len(macro_ci) == 2
+    assert summary["overall"]["overall"]["coverage"] == pytest.approx(1.0)
     assert (out_dir / "per_class.csv").exists()
     assert (out_dir / "confusion_slack_theme.json").exists()
 
 
-def test_eval_labels_cli_gate_fail(tmp_path: Path) -> None:
-    preds_dir = _build_predictions(tmp_path, drop_fraction=0.2, flip_fraction=0.2)
+def test_eval_labels_cli_strict_gate_fail(tmp_path: Path) -> None:
+    preds_dir = _build_predictions(tmp_path, drop_fraction=0.3, flip_fraction=0.4)
     out_base = tmp_path / "reports" / "eval_fail"
+    result = runner.invoke(
+        app,
+        [
+            "eval-labels",
+            "--pred",
+            str(preds_dir),
+            "--labels",
+            str(Path("meta")),
+            "--out",
+            str(out_base),
+            "--strict",
+        ],
+    )
+    assert result.exit_code == 1
+    run_dirs = list(out_base.iterdir())
+    assert len(run_dirs) == 1
+    out_dir = run_dirs[0]
+    summary = json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["gates_pass"] is False
+    assert summary["gates"]["slack_coverage"]["passed"] is False
+
+
+def test_eval_labels_cli_non_strict_allows_gate_fail(tmp_path: Path) -> None:
+    preds_dir = _build_predictions(tmp_path, drop_fraction=0.3, flip_fraction=0.4)
+    out_base = tmp_path / "reports" / "eval_non_strict"
     result = runner.invoke(
         app,
         [
@@ -166,7 +199,7 @@ def test_eval_labels_cli_gate_fail(tmp_path: Path) -> None:
             str(out_base),
         ],
     )
-    assert result.exit_code == 1
+    assert result.exit_code == 0
     run_dirs = list(out_base.iterdir())
     assert len(run_dirs) == 1
     out_dir = run_dirs[0]

@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import json
 from bisect import bisect_left
-from dataclasses import dataclass, replace
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from statistics import median
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 try:  # pragma: no cover - optional dependency
     import polars as pl
+    from polars.datatypes import Date as PlDate, Datetime as PlDatetime
 except ImportError:  # pragma: no cover
     pl = None  # type: ignore[assignment]
+    PlDate = None  # type: ignore[assignment]
+    PlDatetime = None  # type: ignore[assignment]
 
 from data_needs_reporter.utils.hashing import compute_file_hash
 
@@ -91,48 +95,117 @@ def p95_ingest_lag_min(
 
 
 def detect_null_spikes(
-    df: "pl.DataFrame",
-    event_col: str,
-    target_column: str,
+    daily_null_pct: List[Dict[str, float]],
     window: int = 7,
-    threshold_pct: float = 8.0,
+    threshold_pp: float = 8.0,
 ) -> List[Dict[str, float]]:
-    polars = _require_polars()
-    if df.height == 0:
+    if window <= 0 or not daily_null_pct:
         return []
-    daily = (
-        df.with_columns(polars.col(event_col).dt.truncate("1d").alias("_day"))
-        .group_by("_day")
-        .agg(
-            [
-                polars.count().alias("rows"),
-                polars.col(target_column).is_null().sum().alias("nulls"),
-            ]
-        )
-        .sort("_day")
-    )
-    if daily.height == 0:
-        return []
-    daily = daily.with_columns(
-        ((polars.col("nulls") / polars.col("rows")) * 100.0).alias("null_pct")
-    )
-    days = daily["_day"].to_list()
-    rates = daily["null_pct"].to_list()
+
     spikes: List[Dict[str, float]] = []
-    for idx, (day, rate) in enumerate(zip(days, rates)):
-        prev_rates = rates[max(0, idx - window) : idx]
-        if not prev_rates:
-            continue
-        median_prev = float(polars.Series(prev_rates).median())
-        if rate >= median_prev + threshold_pct:
-            spikes.append(
-                {
-                    "ds": day.date().isoformat(),
-                    "column": target_column,
-                    "lift_pct": round(rate - median_prev, 3),
-                }
-            )
+    history: List[float] = []
+
+    for entry in daily_null_pct:
+        pct_raw = entry.get("pct")
+        try:
+            pct_value = float(pct_raw) if pct_raw is not None else 0.0
+        except (TypeError, ValueError):
+            pct_value = 0.0
+        if len(history) >= window:
+            window_values = history[-window:]
+            baseline = float(median(window_values))
+            lift = pct_value - baseline
+            if lift >= threshold_pp:
+                spikes.append(
+                    {
+                        "date": str(entry.get("date") or entry.get("ds")),
+                        "pct": pct_value,
+                        "baseline_pct": baseline,
+                        "lift_pp": round(lift, 4),
+                    }
+                )
+        history.append(pct_value)
+
     return spikes
+
+
+@dataclass(frozen=True)
+class ForeignKeySpec:
+    column: str
+    parent_table: str
+    parent_key: str
+
+
+@dataclass(frozen=True)
+class TableHealthSpec:
+    table: str
+    primary_key: Sequence[str]
+    event_columns: Sequence[str] = ()
+    loaded_columns: Sequence[str] = ()
+    foreign_keys: Sequence[ForeignKeySpec] = ()
+
+
+def _select_first_present(
+    columns: Sequence[str], candidates: Sequence[str]
+) -> Optional[str]:
+    available = set(columns)
+    for candidate in candidates:
+        if candidate in available:
+            return candidate
+    return None
+
+
+def _format_day_value(value: object) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)
+
+
+def _pct(numerator: float, denominator: float) -> float:
+    if not denominator:
+        return 0.0
+    return float(numerator) / float(denominator) * 100.0
+
+
+def _day_trunc_expr(column: str, tz: str, dtype: Optional[object]) -> "pl.Expr":
+    polars = _require_polars()
+
+    expr = polars.col(column)
+    if dtype is not None and PlDatetime is not None and isinstance(dtype, PlDatetime):
+        tz_info = dtype.time_zone
+        if tz_info is None:
+            expr = expr.dt.replace_time_zone(tz)
+        elif tz_info != tz:
+            expr = expr.dt.convert_time_zone(tz)
+    elif dtype is not None and PlDate is not None and isinstance(dtype, PlDate):
+        expr = expr.cast(polars.Datetime(time_unit="us"))
+        expr = expr.dt.replace_time_zone(tz)
+    else:
+        expr = expr.cast(polars.Datetime(time_unit="us"))
+        expr = expr.dt.replace_time_zone(tz)
+    return expr.dt.truncate("1d")
+
+
+def _local_timestamp_expr(column: str, tz: str, dtype: Optional[object]) -> "pl.Expr":
+    polars = _require_polars()
+    expr = polars.col(column)
+    if dtype is not None and PlDatetime is not None and isinstance(dtype, PlDatetime):
+        tz_info = dtype.time_zone
+        if tz_info is None:
+            expr = expr.dt.replace_time_zone(tz)
+        elif tz_info != tz:
+            expr = expr.dt.convert_time_zone(tz)
+    elif dtype is not None and PlDate is not None and isinstance(dtype, PlDate):
+        expr = expr.cast(polars.Datetime(time_unit="us"))
+        expr = expr.dt.replace_time_zone(tz)
+    else:
+        expr = expr.cast(polars.Datetime(time_unit="us"))
+        expr = expr.dt.replace_time_zone(tz)
+    return expr
 
 
 def evaluate_slos(
@@ -368,7 +441,9 @@ def validate_quality_targets(warehouse_path: Path) -> Dict[str, object]:
     }
 
 
-def validate_seasonality_targets(warehouse_path: Path) -> Dict[str, object]:
+def validate_seasonality_targets(
+    warehouse_path: Path, tz: Optional[str] = None
+) -> Dict[str, object]:
     polars = _require_polars()
     path = Path(warehouse_path)
     if not path.exists():
@@ -437,10 +512,26 @@ def validate_seasonality_targets(warehouse_path: Path) -> Dict[str, object]:
             "detail": detail,
         }
 
+    local_ts_expr = polars.col(timestamp_col)
+    dtype = df.schema.get(timestamp_col)
+    if tz and isinstance(dtype, PlDatetime):
+        expr = polars.col(timestamp_col)
+        if dtype.time_zone is None:
+            expr = expr.dt.replace_time_zone("UTC")
+        try:
+            local_ts_expr = expr.dt.convert_time_zone(tz)
+        except Exception:
+            local_ts_expr = expr
     enriched = filtered.with_columns(
         [
-            polars.col(timestamp_col).dt.weekday().alias("_dow"),
-            polars.col(timestamp_col).dt.hour().alias("_hour"),
+            local_ts_expr.alias("_local_ts"),
+        ]
+    )
+    working_ts = polars.col("_local_ts")
+    enriched = enriched.with_columns(
+        [
+            working_ts.dt.weekday().alias("_dow"),
+            working_ts.dt.hour().alias("_hour"),
         ]
     )
 
@@ -711,6 +802,397 @@ def validate_taxonomy_targets(warehouse_path: Path) -> Dict[str, object]:
     return {"passed": False, "issues": [detail], "detail": detail}
 
 
+def validate_marketplace_evening_coverage(
+    warehouse_path: Path,
+    *,
+    tz: str,
+    window_days: int,
+    start_hour: int = 17,
+    end_hour: int = 21,
+    min_share_pct: float = 20.0,
+    min_days_pct: float = 80.0,
+) -> Dict[str, object]:
+    polars = _require_polars()
+    path = Path(warehouse_path)
+    if not path.exists():
+        detail = f"Warehouse path {path} does not exist."
+        return {"passed": False, "issues": [detail], "detail": detail}
+
+    tables = [
+        ("fact_order.parquet", "order_time"),
+        ("fact_payment.parquet", "captured_at"),
+    ]
+    frames: List["pl.DataFrame"] = []
+    load_issues: List[str] = []
+    for filename, column in tables:
+        table_path = path / filename
+        if not table_path.exists():
+            continue
+        try:
+            df = polars.read_parquet(table_path, columns=[column])
+        except Exception as exc:  # pragma: no cover - unreadable file rare
+            load_issues.append(f"Unable to read {filename}: {exc}")
+            continue
+        if column not in df.columns:
+            load_issues.append(f"{filename} missing required column '{column}'.")
+            continue
+        if df.height == 0:
+            continue
+        frames.append(
+            df.rename({column: "ts"}).filter(polars.col("ts").is_not_null())
+        )
+
+    if not frames:
+        detail = "No order or payment events available for evening coverage check."
+        issues = load_issues + [detail]
+        return {"passed": False, "issues": issues, "detail": detail}
+
+    combined = frames[0] if len(frames) == 1 else polars.concat(frames, how="vertical")
+    if combined.height == 0:
+        detail = "Order and payment timestamps are empty after filtering nulls."
+        issues = load_issues + [detail]
+        return {"passed": False, "issues": issues, "detail": detail}
+
+    ts_dtype = combined.schema.get("ts")
+    local_ts_expr = _local_timestamp_expr("ts", tz, ts_dtype)
+    daily_df = (
+        combined.with_columns(
+            [
+                local_ts_expr.alias("_local_ts"),
+                _day_trunc_expr("ts", tz, ts_dtype).alias("_local_day"),
+            ]
+        )
+        .with_columns(
+            [
+                polars.col("_local_ts").dt.hour().alias("_local_hour"),
+                polars.col("_local_ts")
+                .dt.hour()
+                .is_between(start_hour, end_hour, closed="both")
+                .cast(polars.Int64)
+                .alias("_is_evening"),
+            ]
+        )
+        .group_by("_local_day")
+        .agg(
+            [
+                polars.count().alias("total_events"),
+                polars.col("_is_evening").sum().alias("evening_events"),
+            ]
+        )
+        .sort("_local_day")
+    )
+
+    if daily_df.height == 0:
+        detail = "No order or payment activity to evaluate evening coverage."
+        issues = load_issues + [detail]
+        return {"passed": False, "issues": issues, "detail": detail}
+
+    max_day = daily_df["_local_day"].max()
+    if max_day is None:
+        detail = "Unable to determine coverage window (no timestamp data)."
+        issues = load_issues + [detail]
+        return {"passed": False, "issues": issues, "detail": detail}
+
+    cutoff = max_day - timedelta(days=max(window_days - 1, 0))
+    window_df = (
+        daily_df.filter(polars.col("_local_day") >= polars.lit(cutoff))
+        .filter(polars.col("total_events") > 0)
+    )
+
+    if window_df.height == 0:
+        detail = "No order or payment events in the configured report window."
+        issues = load_issues + [detail]
+        return {"passed": False, "issues": issues, "detail": detail}
+
+    window_df = window_df.with_columns(
+        (
+            polars.col("evening_events") / polars.col("total_events") * 100.0
+        ).alias("evening_pct")
+    )
+
+    total_days = window_df.height
+    qualifying_days = window_df.filter(
+        polars.col("evening_pct") >= min_share_pct
+    ).height
+    qualifying_pct = (qualifying_days / total_days) * 100.0 if total_days else 0.0
+
+    coverage_message = (
+        f"Evening coverage satisfied ({qualifying_days}/{total_days} days "
+        f">= {min_share_pct:.1f}% between {start_hour}:00-{end_hour}:59)."
+    )
+    issues = list(load_issues)
+    passed = qualifying_pct >= min_days_pct
+    if not passed:
+        coverage_issue = (
+            f"Evening coverage shortfall: {qualifying_pct:.1f}% of days "
+            f"met the {min_share_pct:.1f}% threshold (required {min_days_pct:.1f}%)."
+        )
+        issues.append(coverage_issue)
+        detail = coverage_issue
+    else:
+        detail = coverage_message
+        if load_issues:
+            detail = coverage_message + " " + "; ".join(load_issues)
+
+    return {"passed": passed, "issues": issues, "detail": detail}
+
+
+def validate_marketplace_category_caps(
+    warehouse_path: Path,
+    category_caps: Optional[Mapping[str, float]] = None,
+) -> Dict[str, object]:
+    polars = _require_polars()
+    path = Path(warehouse_path)
+    if not path.exists():
+        detail = f"Warehouse path {path} does not exist."
+        return {"passed": False, "issues": [detail], "detail": detail}
+
+    caps = dict(category_caps or {})
+    if not caps:
+        detail = "No category caps configured; skipping marketplace category check."
+        return {"passed": True, "issues": [], "detail": detail}
+
+    category_path = path / "dim_category.parquet"
+    listing_path = path / "dim_listing.parquet"
+    order_items_path = path / "fact_order_item.parquet"
+    missing = [
+        str(p.name)
+        for p in [category_path, listing_path, order_items_path]
+        if not p.exists()
+    ]
+    if missing:
+        detail = f"Missing tables for category caps: {', '.join(missing)}."
+        return {"passed": False, "issues": [detail], "detail": detail}
+
+    try:
+        categories = polars.read_parquet(category_path)
+        listings = polars.read_parquet(listing_path)
+        order_items = polars.read_parquet(order_items_path)
+    except Exception as exc:  # pragma: no cover
+        detail = f"Unable to read marketplace taxonomy tables: {exc}"
+        return {"passed": False, "issues": [detail], "detail": detail}
+
+    if categories.height == 0 or listings.height == 0 or order_items.height == 0:
+        detail = "Marketplace taxonomy tables contain no data for category caps validation."
+        return {"passed": False, "issues": [detail], "detail": detail}
+
+    required_category_cols = {"category_id", "parent_id"}
+    if not required_category_cols.issubset(categories.columns):
+        detail = "dim_category must include 'category_id' and 'parent_id'."
+        return {"passed": False, "issues": [detail], "detail": detail}
+
+    if "name" not in categories.columns:
+        categories = categories.with_columns(
+            polars.col("category_id")
+            .cast(polars.Int64)
+            .apply(lambda val: f"category_{int(val)}" if val is not None else "category_unknown")
+            .alias("name")
+        )
+
+    if "category_id" not in listings.columns:
+        detail = "dim_listing missing 'category_id'."
+        return {"passed": False, "issues": [detail], "detail": detail}
+
+    if not {"listing_id", "qty", "item_price_cents"}.issubset(order_items.columns):
+        detail = "fact_order_item missing required columns."
+        return {"passed": False, "issues": [detail], "detail": detail}
+
+    category_records = categories.select(
+        [
+            polars.col("category_id").cast(polars.Int64).alias("category_id"),
+            polars.col("parent_id").cast(polars.Int64).alias("parent_id"),
+            polars.col("name").cast(polars.Utf8).alias("name"),
+        ]
+    ).to_dicts()
+
+    parent_map: Dict[int, Optional[int]] = {
+        int(row["category_id"]): (
+            int(row["parent_id"]) if row["parent_id"] is not None else None
+        )
+        for row in category_records
+    }
+    name_map: Dict[int, str] = {
+        int(row["category_id"]): str(row.get("name") or f"category_{row['category_id']}")
+        for row in category_records
+    }
+
+    top_cache: Dict[int, Optional[int]] = {}
+
+    def resolve_top(category_id: int) -> Optional[int]:
+        if category_id in top_cache:
+            return top_cache[category_id]
+        current = category_id
+        seen: set[int] = set()
+        while True:
+            if current in seen:
+                top_cache[category_id] = None
+                return None
+            seen.add(current)
+            parent = parent_map.get(current)
+            if parent is None:
+                top_cache[category_id] = current
+                return current
+            if parent not in parent_map and parent is not None:
+                top_cache[category_id] = parent
+                return parent
+            current = parent
+
+    category_ids = list(parent_map.keys())
+    mapping_rows = []
+    for cat_id in category_ids:
+        top_id = resolve_top(cat_id)
+        if top_id is not None:
+            mapping_rows.append({"category_id": cat_id, "top_category_id": top_id})
+    mapping_df = polars.DataFrame(mapping_rows)
+
+    listings_enriched = listings.select(
+        [
+            polars.col("listing_id").cast(polars.Int64),
+            polars.col("category_id").cast(polars.Int64),
+        ]
+    ).join(mapping_df, on="category_id", how="left")
+
+    order_items_enriched = order_items.select(
+        [
+            polars.col("order_id").cast(polars.Int64),
+            polars.col("listing_id").cast(polars.Int64),
+            polars.col("qty").cast(polars.Float64),
+            polars.col("item_price_cents").cast(polars.Float64),
+        ]
+    ).join(listings_enriched, on="listing_id", how="left")
+
+    missing_top_categories = (
+        order_items_enriched.filter(polars.col("top_category_id").is_null())
+        .select("listing_id")
+        .to_series()
+        .drop_nulls()
+        .to_list()
+    )
+
+    order_items_enriched = order_items_enriched.filter(
+        polars.col("top_category_id").is_not_null()
+    )
+
+    order_items_enriched = order_items_enriched.with_columns(
+        (polars.col("qty") * polars.col("item_price_cents")).alias("gmv_cents")
+    )
+
+    gmv_by_category = (
+        order_items_enriched.group_by("top_category_id")
+        .agg(polars.col("gmv_cents").sum().alias("gmv_cents"))
+        .sort("top_category_id")
+    )
+
+    if gmv_by_category.height == 0:
+        detail = "Order item GMV unavailable for category caps validation."
+        issues = []
+        if missing_top_categories:
+            issues.append(
+                "Unmapped listing categories: "
+                + ", ".join(str(int(val)) for val in missing_top_categories)
+            )
+        issues.append(detail)
+        return {"passed": False, "issues": issues, "detail": detail}
+
+    total_gmv = float(gmv_by_category["gmv_cents"].sum())
+    if total_gmv <= 0:
+        detail = "Total GMV is zero; cannot validate category caps."
+        return {"passed": False, "issues": [detail], "detail": detail}
+
+    top_name_df = polars.DataFrame(
+        {
+            "top_category_id": [
+                cat_id for cat_id, parent in parent_map.items() if parent is None
+            ],
+            "top_category_name": [
+                name_map.get(cat_id, f"category_{cat_id}")
+                for cat_id, parent in parent_map.items()
+                if parent is None
+            ],
+        }
+    )
+
+    gmv_by_category = gmv_by_category.join(
+        top_name_df, on="top_category_id", how="left"
+    ).with_columns(
+        (polars.col("gmv_cents") / polars.lit(total_gmv)).alias("share")
+    )
+
+    share_map: Dict[int, float] = {
+        int(cat_id): float(share)
+        for cat_id, share in zip(
+            gmv_by_category["top_category_id"].to_list(),
+            gmv_by_category["share"].to_list(),
+        )
+    }
+    top_name_map = {
+        int(cat_id): (
+            name if name is not None else name_map.get(int(cat_id), str(cat_id))
+        )
+        for cat_id, name in zip(
+            gmv_by_category["top_category_id"].to_list(),
+            gmv_by_category["top_category_name"].to_list(),
+        )
+    }
+
+    issues: List[str] = []
+    if missing_top_categories:
+        issues.append(
+            "Unmapped listing categories: "
+            + ", ".join(str(int(val)) for val in missing_top_categories)
+        )
+
+    normalized_caps: Dict[int, float] = {}
+    for key, raw_limit in caps.items():
+        try:
+            limit = float(raw_limit)
+        except (TypeError, ValueError):
+            issues.append(f"Invalid cap for {key!r}: {raw_limit!r}")
+            continue
+        if limit > 1.0:
+            limit = limit / 100.0
+        matched_id: Optional[int] = None
+        lowered_key = str(key).lower()
+        for cat_id, name in top_name_map.items():
+            if str(cat_id) == str(key):
+                matched_id = cat_id
+                break
+            if name and name.lower() == lowered_key:
+                matched_id = cat_id
+                break
+        if matched_id is None:
+            issues.append(f"Unknown category specified in caps: {key!r}.")
+            continue
+        normalized_caps[matched_id] = limit
+
+    for cat_id, limit in normalized_caps.items():
+        share = share_map.get(cat_id, 0.0)
+        if share > limit + 1e-9:
+            name = top_name_map.get(cat_id, str(cat_id))
+            issues.append(
+                f"Category {name} share {share * 100:.1f}% exceeds cap {limit * 100:.1f}%."
+            )
+
+    passed = not issues
+    if passed:
+        detail_parts = []
+        for cat_id, limit in normalized_caps.items():
+            name = top_name_map.get(cat_id, str(cat_id))
+            share_pct = share_map.get(cat_id, 0.0) * 100.0
+            detail_parts.append(f"{name}={share_pct:.1f}% (cap {limit * 100:.1f}%)")
+        detail = (
+            "Category caps satisfied ("
+            + ", ".join(detail_parts)
+            + ")."
+            if detail_parts
+            else "Category caps satisfied."
+        )
+    else:
+        detail = "; ".join(issues)
+
+    return {"passed": passed, "issues": issues, "detail": detail}
+
+
 def validate_monetization_targets(warehouse_path: Path) -> Dict[str, object]:
     polars = _require_polars()
     path = Path(warehouse_path)
@@ -898,8 +1380,13 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
 
     customer_path = path / "dim_customer.parquet"
     invoice_path = path / "fact_subscription_invoice.parquet"
+    txn_path = path / "fact_card_transaction.parquet"
 
-    missing = [str(p.name) for p in [customer_path, invoice_path] if not p.exists()]
+    missing = [
+        str(p.name)
+        for p in [customer_path, invoice_path, txn_path]
+        if not p.exists()
+    ]
     if missing:
         detail = f"Missing required trajectory tables: {', '.join(missing)}."
         return {"passed": False, "issues": [detail], "detail": detail}
@@ -907,12 +1394,16 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
     try:
         customers = polars.read_parquet(customer_path)
         invoices = polars.read_parquet(invoice_path)
+        transactions = polars.read_parquet(
+            txn_path, columns=["event_time", "amount_cents"]
+        )
     except Exception as exc:  # pragma: no cover - unreadable file rare
         detail = f"Unable to read trajectory tables: {exc}"
         return {"passed": False, "issues": [detail], "detail": detail}
 
     issues: List[str] = []
     detail_parts: List[str] = []
+    event_days = _load_trajectory_event_days(path)
 
     if customers.height == 0:
         issues.append("Customer table empty; cannot evaluate trajectory.")
@@ -1011,6 +1502,80 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
                 else:
                     detail_parts.append(f"churn_rate={churn_rate:.4f}")
 
+    gmv_issue_found = False
+    if transactions.height == 0:
+        issues.append("No transactions available to assess GMV trajectory.")
+    elif not {"event_time", "amount_cents"}.issubset(transactions.columns):
+        issues.append(
+            "fact_card_transaction must include 'event_time' and 'amount_cents' for trajectory checks."
+        )
+    else:
+        negative_rows = transactions.filter(polars.col("amount_cents") < 0).height
+        if negative_rows > 0:
+            issues.append("Negative transaction amounts detected; GMV cannot be negative.")
+            gmv_issue_found = True
+        else:
+            daily_gmv = (
+                transactions.with_columns(
+                    polars.col("event_time").dt.truncate("1d").alias("_day")
+                )
+                .group_by("_day")
+                .agg(
+                    polars.col("amount_cents")
+                    .cast(polars.Float64)
+                    .sum()
+                    .alias("gmv_cents")
+                )
+                .sort("_day")
+            )
+            day_values = daily_gmv.get_column("_day").to_list()
+            gmv_values = daily_gmv.get_column("gmv_cents").to_list()
+            prev_value: Optional[float] = None
+            for day_value, gmv_entry in zip(day_values, gmv_values):
+                gmv_value = float(gmv_entry or 0.0)
+                if gmv_value < 0:
+                    issues.append(
+                        f"Negative GMV detected on {day_value}: {gmv_value:.2f} cents."
+                    )
+                    gmv_issue_found = True
+                    break
+                if isinstance(day_value, datetime):
+                    day_date = _ensure_timezone(day_value).date()
+                elif isinstance(day_value, date):
+                    day_date = day_value
+                else:
+                    parsed = _parse_event_timestamp(day_value)
+                    day_date = parsed.date() if parsed else None
+                if prev_value is not None:
+                    if prev_value <= 0.0:
+                        if gmv_value > 0.0 and (day_date not in event_days):
+                            label = (
+                                day_date.isoformat() if day_date else str(day_value)
+                            )
+                            issues.append(
+                                f"GMV jumped from zero to {gmv_value:.2f} cents on {label} without an event marker."
+                            )
+                            gmv_issue_found = True
+                            break
+                    else:
+                        ratio = gmv_value / prev_value if prev_value else float("inf")
+                        if (
+                            ratio > TRAJECTORY_MAX_JUMP
+                            and (day_date not in event_days)
+                        ):
+                            label = (
+                                day_date.isoformat() if day_date else str(day_value)
+                            )
+                            issues.append(
+                                f"GMV spike {ratio:.2f}× on {label} exceeds {TRAJECTORY_MAX_JUMP:.1f}× "
+                                f"(mark the day in {TRAJECTORY_EVENT_FILE} to allow known events)."
+                            )
+                            gmv_issue_found = True
+                            break
+                prev_value = gmv_value
+            if not gmv_issue_found and daily_gmv.height > 0:
+                detail_parts.append("gmv_stable")
+
     passed = not issues
     detail = "Trajectory targets satisfied." if passed else "; ".join(issues)
     if passed and detail_parts:
@@ -1030,6 +1595,7 @@ def validate_comms_targets(comms_path: Path) -> Dict[str, object]:
 
     total_threads = 0
     bucket_counts: Dict[str, int] = {}
+    source_bucket_counts: Dict[str, Dict[str, int]] = {}
     exec_count = 0
 
     nlq_token_cap_ok = False
@@ -1051,6 +1617,10 @@ def validate_comms_targets(comms_path: Path) -> Dict[str, object]:
         else:
             detail_parts.append(f"{filename}={volume}")
 
+        source_name = COMMS_SOURCE_NAMES.get(
+            filename, filename.rsplit(".", 1)[0]
+        )
+
         if "thread_id" in data.columns:
             total_threads += data.select(polars.col("thread_id")).n_unique()
 
@@ -1060,8 +1630,12 @@ def validate_comms_targets(comms_path: Path) -> Dict[str, object]:
                 .agg(polars.count().alias("count"))
                 .to_dict(as_series=False)
             )
+            source_counts = source_bucket_counts.setdefault(source_name, {})
             for bucket, count in zip(counts["bucket"], counts["count"]):
                 bucket_counts[str(bucket)] = bucket_counts.get(str(bucket), 0) + int(
+                    count
+                )
+                source_counts[str(bucket)] = source_counts.get(str(bucket), 0) + int(
                     count
                 )
 
@@ -1083,17 +1657,39 @@ def validate_comms_targets(comms_path: Path) -> Dict[str, object]:
                     nlq_token_cap_ok = True
 
     total_messages = sum(bucket_counts.values())
+    bucket_mix_issue = False
     if total_messages <= 0:
         issues.append("No communication messages found to evaluate bucket mix.")
+        bucket_mix_issue = True
     else:
         for bucket, count in bucket_counts.items():
-            share = count / total_messages
+            share = count / total_messages if total_messages else 0.0
             if share < COMMS_BUCKET_MIN_SHARE:
                 issues.append(
                     f"Bucket '{bucket}' share {share:.3f} below {COMMS_BUCKET_MIN_SHARE:.2f}."
                 )
-        if not issues:
-            detail_parts.append("bucket_mix_ok")
+                bucket_mix_issue = True
+    if not bucket_mix_issue:
+        detail_parts.append("bucket_mix_ok")
+
+    for source, counts in source_bucket_counts.items():
+        source_total = sum(counts.values())
+        source_issue = False
+        if source_total <= 0:
+            issues.append(
+                f"No messages found for {source}; cannot evaluate bucket mix."
+            )
+            source_issue = True
+        else:
+            for bucket, count in counts.items():
+                share = count / source_total if source_total else 0.0
+                if share < COMMS_BUCKET_MIN_SHARE:
+                    issues.append(
+                        f"{source} bucket '{bucket}' share {share:.3f} below {COMMS_BUCKET_MIN_SHARE:.2f}."
+                    )
+                    source_issue = True
+        if not source_issue:
+            detail_parts.append(f"{source}_bucket_mix_ok")
 
     if total_threads <= 0:
         issues.append(
@@ -1722,6 +2318,8 @@ NEOBANK_ATTACH_RANGE = (0.06, 0.10)
 MARKETPLACE_TAKE_RATE_RANGE = (0.11, 0.13)
 TRAJECTORY_GROWTH_TOLERANCE = 0.05
 TRAJECTORY_MIN_MONTHS = 4
+TRAJECTORY_MAX_JUMP = 5.0
+TRAJECTORY_EVENT_FILE = "trajectory_events.json"
 KYC_VERIFIED_TARGET = 0.70
 KYC_TOLERANCE = 0.005
 CHURN_TARGET = 0.018
@@ -1730,6 +2328,11 @@ COMMS_VOLUME_SPEC = {
     "slack_messages.parquet": (2850, 3150),
     "email_messages.parquet": (760, 840),
     "nlq.parquet": (950, 1050),
+}
+COMMS_SOURCE_NAMES = {
+    "slack_messages.parquet": "slack",
+    "email_messages.parquet": "email",
+    "nlq.parquet": "nlq",
 }
 COMMS_BUCKET_MIN_SHARE = 0.15
 EXEC_THREAD_SHARE_RANGE = (0.05, 0.12)
@@ -1792,6 +2395,58 @@ def _collect_spike_events(
             }
         )
     return events
+
+
+def _load_trajectory_event_days(base_path: Path) -> Set[date]:
+    event_days: Set[date] = set()
+    summary_path = base_path / "data_quality_summary.json"
+    summary: Optional[Mapping[str, object]] = None
+    if summary_path.exists():
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        except Exception:
+            summary = None
+    if summary:
+        for event in _collect_spike_events(summary):
+            timestamp = event.get("timestamp")
+            if isinstance(timestamp, datetime):
+                event_days.add(_ensure_timezone(timestamp).date())
+
+    events_path = base_path / TRAJECTORY_EVENT_FILE
+    if events_path.exists():
+        try:
+            payload = json.loads(events_path.read_text(encoding="utf-8"))
+        except Exception:
+            payload = None
+        if isinstance(payload, Mapping) and "events" in payload:
+            entries = payload.get("events")
+        else:
+            entries = payload
+
+        def _try_add(value: object) -> None:
+            timestamp = _parse_event_timestamp(value)
+            if timestamp is not None:
+                event_days.add(timestamp.date())
+
+        if isinstance(entries, Mapping):
+            _try_add(entries.get("timestamp") or entries.get("day") or entries.get("date"))
+        elif isinstance(entries, Sequence):
+            for entry in entries:
+                if isinstance(entry, Mapping):
+                    candidate = (
+                        entry.get("timestamp")
+                        or entry.get("day")
+                        or entry.get("date")
+                        or entry.get("at")
+                    )
+                    if candidate is not None:
+                        _try_add(candidate)
+                else:
+                    _try_add(entry)
+        elif entries is not None:
+            _try_add(entries)
+
+    return event_days
 
 
 def _detect_schema_gap_event(polars, table_path: Path) -> Optional[Dict[str, object]]:
@@ -2015,56 +2670,421 @@ WAREHOUSE_VOLUME_TARGETS: Dict[str, Dict[str, int]] = {
 }
 
 
-def compute_data_health(
-    archetype: str, warehouse_path: Path
-) -> List[Dict[str, object]]:
+NEOBANK_HEALTH_SPECS: Tuple[TableHealthSpec, ...] = (
+    TableHealthSpec(
+        table="dim_customer",
+        primary_key=("customer_id",),
+        event_columns=("created_at",),
+    ),
+    TableHealthSpec(
+        table="dim_account",
+        primary_key=("account_id",),
+        event_columns=("created_at",),
+        foreign_keys=(ForeignKeySpec("customer_id", "dim_customer", "customer_id"),),
+    ),
+    TableHealthSpec(
+        table="dim_card",
+        primary_key=("card_id",),
+        event_columns=("activated_at",),
+        foreign_keys=(ForeignKeySpec("account_id", "dim_account", "account_id"),),
+    ),
+    TableHealthSpec(
+        table="dim_merchant",
+        primary_key=("merchant_id",),
+        event_columns=("created_at",),
+    ),
+    TableHealthSpec(
+        table="dim_plan",
+        primary_key=("plan_id",),
+        event_columns=(),
+    ),
+    TableHealthSpec(
+        table="fact_card_transaction",
+        primary_key=("txn_id",),
+        event_columns=("event_time",),
+        loaded_columns=("loaded_at",),
+        foreign_keys=(
+            ForeignKeySpec("merchant_id", "dim_merchant", "merchant_id"),
+            ForeignKeySpec("card_id", "dim_card", "card_id"),
+        ),
+    ),
+    TableHealthSpec(
+        table="fact_subscription_invoice",
+        primary_key=("invoice_id",),
+        event_columns=("invoice_date", "paid_at", "period_end", "period_start"),
+        loaded_columns=("loaded_at", "paid_at"),
+        foreign_keys=(ForeignKeySpec("customer_id", "dim_customer", "customer_id"),),
+    ),
+)
+
+MARKETPLACE_HEALTH_SPECS: Tuple[TableHealthSpec, ...] = (
+    TableHealthSpec(
+        table="dim_buyer",
+        primary_key=("buyer_id",),
+        event_columns=("created_at",),
+    ),
+    TableHealthSpec(
+        table="dim_seller",
+        primary_key=("seller_id",),
+        event_columns=("created_at",),
+    ),
+    TableHealthSpec(
+        table="fact_order",
+        primary_key=("order_id",),
+        event_columns=("order_time",),
+        loaded_columns=("loaded_at",),
+        foreign_keys=(ForeignKeySpec("buyer_id", "dim_buyer", "buyer_id"),),
+    ),
+    TableHealthSpec(
+        table="fact_payment",
+        primary_key=("order_id",),
+        event_columns=("captured_at", "loaded_at"),
+        loaded_columns=("loaded_at",),
+        foreign_keys=(ForeignKeySpec("order_id", "fact_order", "order_id"),),
+    ),
+)
+
+HEALTH_TABLE_SPECS: Tuple[TableHealthSpec, ...] = (
+    NEOBANK_HEALTH_SPECS + MARKETPLACE_HEALTH_SPECS
+)
+
+
+def compute_data_health(warehouse_dir: Path, tz: str) -> Dict[str, object]:
     polars = _require_polars()
-    archetype_key = archetype.lower()
-    specs = TABLE_METRIC_SPECS.get(archetype_key, [])
-    warehouse_path = Path(warehouse_path)
-    if not specs:
-        return []
+    warehouse_path = Path(warehouse_dir)
+    tables: Dict[str, Dict[str, object]] = {}
 
-    table_dfs: Dict[str, Optional["pl.DataFrame"]] = {}
-    for table_name, _ in specs:
-        table_path = warehouse_path / f"{table_name}.parquet"
-        if table_path.exists():
-            try:
-                table_dfs[table_name] = polars.read_parquet(table_path)
-            except Exception:  # pragma: no cover - unreadable file
-                table_dfs[table_name] = None
+    agg_rows = 0
+    agg_key_null_rows = 0.0
+    agg_dup_rows = 0.0
+    agg_fk_attempts = 0
+    agg_fk_matches = 0
+    agg_fk_orphans = 0
+    lag_values_all: List[float] = []
+
+    lazy_cache: Dict[str, Optional["pl.LazyFrame"]] = {}
+    schema_cache: Dict[str, Mapping[str, object]] = {}
+
+    def get_lazy(table: str) -> Optional["pl.LazyFrame"]:
+        if table in lazy_cache:
+            return lazy_cache[table]
+        table_path = warehouse_path / f"{table}.parquet"
+        if not table_path.exists():
+            lazy_cache[table] = None
         else:
-            table_dfs[table_name] = None
+            lazy_cache[table] = polars.scan_parquet(table_path)
+        return lazy_cache[table]
 
-    results: List[Dict[str, object]] = []
-    for table_name, spec in specs:
-        df = table_dfs.get(table_name)
-        if (
-            df is None
-            or df.height == 0
-            or any(col not in df.columns for col in spec.required_columns)
-        ):
-            metrics = dict(DEFAULT_METRIC_ROW)
-            row_count = int(df.height) if df is not None else 0
-            metrics.update({"table": table_name, "row_count": row_count})
-            results.append(metrics)
+    def get_schema(table: str) -> Mapping[str, object]:
+        if table not in schema_cache:
+            lf = get_lazy(table)
+            schema_cache[table] = lf.schema if lf is not None else {}
+        return schema_cache[table]
+
+    for spec in HEALTH_TABLE_SPECS:
+        lf = get_lazy(spec.table)
+        if lf is None:
             continue
 
-        working_config = spec
-        if spec.fk_column and spec.fk_dimension_ids is None:
-            fk_ids: Sequence[int] = []
-            fk_table = spec.fk_dimension_table
-            fk_key = spec.fk_dimension_key or spec.fk_column
-            fk_df = table_dfs.get(fk_table) if fk_table else None
-            if fk_df is not None and fk_key in fk_df.columns:
-                fk_ids = fk_df.select(fk_key).to_series().to_list()  # type: ignore[arg-type]
-            working_config = replace(spec, fk_dimension_ids=fk_ids)
+        schema = get_schema(spec.table)
+        columns = tuple(schema.keys())
+        row_count_df = lf.select(polars.count().alias("_rows")).collect()
+        row_count = int(row_count_df["_rows"][0]) if row_count_df.height else 0
 
-        metrics = compute_table_metrics(df, working_config)
-        metrics["table"] = table_name
-        metrics["row_count"] = df.height
-        results.append(metrics)
-    return results
+        key_null_rows = 0.0
+        duplicate_rows = 0.0
+        table_fk_attempts = 0
+        table_fk_matches = 0
+        table_fk_orphans = 0
+
+        table_metrics: Dict[str, object] = {
+            "row_count": row_count,
+            "key_null_pct": 0.0,
+            "key_null_pct_daily": [],
+            "key_null_spikes": [],
+            "fk_success_pct": 100.0,
+            "fk_success_pct_daily": [],
+            "orphan_pct": 0.0,
+            "orphan_pct_daily": [],
+            "dup_key_pct": 0.0,
+            "dup_key_pct_daily": [],
+            "p95_ingest_lag_min": 0.0,
+            "p95_ingest_lag_min_daily": [],
+        }
+
+        event_col = _select_first_present(columns, spec.event_columns)
+        event_dtype = schema.get(event_col) if event_col else None
+        loaded_col = _select_first_present(columns, spec.loaded_columns)
+        day_expr = _day_trunc_expr(event_col, tz, event_dtype) if event_col else None
+
+        def build_pk_null_expr() -> Optional["pl.Expr"]:
+            if not spec.primary_key:
+                return None
+            for col in spec.primary_key:
+                if col not in schema:
+                    return None
+            exprs = [polars.col(col).is_null() for col in spec.primary_key]
+            base_expr = exprs[0] if len(exprs) == 1 else polars.any_horizontal(exprs)
+            return base_expr.alias("_pk_is_null")
+
+        def build_pk_unique_expr(alias: str) -> Optional["pl.Expr"]:
+            if not spec.primary_key:
+                return None
+            for col in spec.primary_key:
+                if col not in schema:
+                    return None
+            return (
+                polars.struct([polars.col(col) for col in spec.primary_key])
+                .n_unique()
+                .alias(alias)
+            )
+
+        key_null_daily: List[Dict[str, float]] = []
+        pk_null_expr = build_pk_null_expr()
+        if pk_null_expr is not None and row_count:
+            key_null_df = (
+                lf.with_columns(pk_null_expr)
+                .select(polars.col("_pk_is_null").sum().alias("_pk_null_rows"))
+                .collect()
+            )
+            key_null_rows = (
+                float(key_null_df["_pk_null_rows"][0] or 0.0)
+                if key_null_df.height
+                else 0.0
+            )
+            table_metrics["key_null_pct"] = _pct(key_null_rows, row_count)
+            if day_expr is not None:
+                pk_null_daily_expr = build_pk_null_expr()
+                if pk_null_daily_expr is not None:
+                    daily_key_df = (
+                        lf.with_columns([day_expr.alias("_day"), pk_null_daily_expr])
+                        .group_by("_day")
+                        .agg(
+                            [
+                                polars.count().alias("rows"),
+                                polars.col("_pk_is_null").sum().alias("null_rows"),
+                            ]
+                        )
+                        .sort("_day")
+                        .collect()
+                    )
+                    key_null_daily = [
+                        {
+                            "date": _format_day_value(row["_day"]),
+                            "pct": _pct(row["null_rows"], row["rows"]),
+                        }
+                        for row in daily_key_df.to_dicts()
+                    ]
+                    table_metrics["key_null_pct_daily"] = key_null_daily
+                    spikes = []
+                    if len(key_null_daily) > 1:
+                        spike_window = min(7, max(1, len(key_null_daily) - 1))
+                        spikes = detect_null_spikes(
+                            key_null_daily, window=spike_window
+                        )
+                    if spikes:
+                        table_metrics["key_null_spikes"] = spikes
+
+        dup_daily: List[Dict[str, float]] = []
+        pk_unique_expr = build_pk_unique_expr("_unique_pk")
+        if pk_unique_expr is not None and row_count:
+            unique_df = lf.select(pk_unique_expr).collect()
+            unique_rows = int(unique_df["_unique_pk"][0] or 0) if unique_df.height else 0
+            duplicate_rows = max(float(row_count - unique_rows), 0.0)
+            table_metrics["dup_key_pct"] = _pct(duplicate_rows, row_count)
+            if day_expr is not None:
+                pk_unique_daily_expr = build_pk_unique_expr("unique_rows")
+                if pk_unique_daily_expr is not None:
+                    dup_daily_df = (
+                        lf.with_columns(day_expr.alias("_day"))
+                        .group_by("_day")
+                        .agg(
+                            [
+                                polars.count().alias("rows"),
+                                pk_unique_daily_expr,
+                            ]
+                        )
+                        .sort("_day")
+                        .with_columns(
+                            (
+                                (polars.col("rows") - polars.col("unique_rows"))
+                                / polars.col("rows")
+                                * 100.0
+                            ).alias("dup_pct")
+                        )
+                        .collect()
+                    )
+                    dup_daily = [
+                        {
+                            "date": _format_day_value(row["_day"]),
+                            "pct": float(row["dup_pct"] or 0.0),
+                        }
+                        for row in dup_daily_df.to_dicts()
+                    ]
+                    table_metrics["dup_key_pct_daily"] = dup_daily
+
+        fk_daily_counts: Dict[str, Dict[str, int]] = {}
+        for fk in spec.foreign_keys:
+            if fk.column not in schema:
+                continue
+            parent_lf = get_lazy(fk.parent_table)
+            if parent_lf is None:
+                continue
+            parent_schema = get_schema(fk.parent_table)
+            if fk.parent_key not in parent_schema:
+                continue
+
+            parent_values_df = (
+                parent_lf.select(polars.col(fk.parent_key))
+                .drop_nulls()
+                .unique()
+                .collect()
+            )
+            parent_values = (
+                parent_values_df[fk.parent_key].to_list()
+                if fk.parent_key in parent_values_df.columns
+                else []
+            )
+            child_filtered = lf.filter(polars.col(fk.column).is_not_null())
+            fk_with_match = child_filtered.with_columns(
+                polars.col(fk.column).is_in(parent_values).alias("_fk_match")
+            )
+            fk_counts_df = fk_with_match.select(
+                [
+                    polars.count().alias("_fk_attempts"),
+                    polars.col("_fk_match").sum().alias("_fk_matches"),
+                ]
+            ).collect()
+            attempts = (
+                int(fk_counts_df["_fk_attempts"][0]) if fk_counts_df.height else 0
+            )
+            matches_val = fk_counts_df["_fk_matches"][0] if fk_counts_df.height else 0
+            matches = int(matches_val or 0)
+            if attempts == 0:
+                continue
+
+            table_fk_attempts += attempts
+            table_fk_matches += matches
+
+            if day_expr is not None:
+                fk_daily_df = (
+                    fk_with_match.with_columns(day_expr.alias("_day"))
+                    .group_by("_day")
+                    .agg(
+                        [
+                            polars.count().alias("attempts"),
+                            polars.col("_fk_match").sum().alias("matches"),
+                        ]
+                    )
+                    .collect()
+                )
+                for row in fk_daily_df.to_dicts():
+                    day_key = _format_day_value(row["_day"])
+                    counts = fk_daily_counts.setdefault(
+                        day_key, {"attempts": 0, "matches": 0}
+                    )
+                    counts["attempts"] += int(row["attempts"] or 0)
+                    counts["matches"] += int(row["matches"] or 0)
+
+        table_fk_orphans = max(table_fk_attempts - table_fk_matches, 0)
+        if table_fk_attempts:
+            table_metrics["fk_success_pct"] = _pct(
+                table_fk_matches, table_fk_attempts
+            )
+            table_metrics["orphan_pct"] = _pct(table_fk_orphans, table_fk_attempts)
+        else:
+            table_metrics["fk_success_pct"] = 100.0
+            table_metrics["orphan_pct"] = 0.0
+
+        if fk_daily_counts:
+            success_daily: List[Dict[str, float]] = []
+            orphan_daily: List[Dict[str, float]] = []
+            for day_key in sorted(fk_daily_counts):
+                counts = fk_daily_counts[day_key]
+                attempts = counts["attempts"]
+                matches = counts["matches"]
+                orphans = attempts - matches
+                success_daily.append({"date": day_key, "pct": _pct(matches, attempts)})
+                orphan_daily.append({"date": day_key, "pct": _pct(orphans, attempts)})
+            table_metrics["fk_success_pct_daily"] = success_daily
+            table_metrics["orphan_pct_daily"] = orphan_daily
+
+        lag_daily: List[Dict[str, float]] = []
+        table_lag_p95 = 0.0
+        if (
+            row_count
+            and event_col
+            and loaded_col
+            and event_col in schema
+            and loaded_col in schema
+        ):
+            lag_expr = (
+                (polars.col(loaded_col) - polars.col(event_col)).dt.total_seconds()
+                / 60.0
+            ).alias("_lag_min")
+            lag_base = lf.filter(
+                polars.col(event_col).is_not_null()
+                & polars.col(loaded_col).is_not_null()
+            ).with_columns(lag_expr)
+            lag_values_df = lag_base.select(polars.col("_lag_min")).collect()
+            if lag_values_df.height:
+                lag_series = lag_values_df["_lag_min"].drop_nulls()
+                if not lag_series.is_empty():
+                    table_lag_p95 = float(
+                        lag_series.quantile(0.95, interpolation="higher")
+                    )
+                    lag_values_all.extend(float(val) for val in lag_series.to_list())
+            if day_expr is not None:
+                lag_daily_df = (
+                    lag_base.with_columns(day_expr.alias("_day"))
+                    .group_by("_day")
+                    .agg(
+                        polars.col("_lag_min")
+                        .drop_nulls()
+                        .quantile(0.95, interpolation="higher")
+                        .alias("p95_lag_min")
+                    )
+                    .sort("_day")
+                    .collect()
+                )
+                lag_daily = [
+                    {
+                        "date": _format_day_value(row["_day"]),
+                        "minutes": float(row["p95_lag_min"] or 0.0),
+                    }
+                    for row in lag_daily_df.to_dicts()
+                ]
+        table_metrics["p95_ingest_lag_min"] = table_lag_p95
+        table_metrics["p95_ingest_lag_min_daily"] = lag_daily
+
+        agg_rows += row_count
+        agg_key_null_rows += key_null_rows
+        agg_dup_rows += duplicate_rows
+        agg_fk_attempts += table_fk_attempts
+        agg_fk_matches += table_fk_matches
+        agg_fk_orphans += table_fk_orphans
+
+        tables[spec.table] = table_metrics
+
+    aggregates: Dict[str, float] = {
+        "key_null_pct": _pct(agg_key_null_rows, agg_rows),
+        "dup_key_pct": _pct(agg_dup_rows, agg_rows),
+    }
+    if agg_fk_attempts:
+        aggregates["fk_success_pct"] = _pct(agg_fk_matches, agg_fk_attempts)
+        aggregates["orphan_pct"] = _pct(agg_fk_orphans, agg_fk_attempts)
+    else:
+        aggregates["fk_success_pct"] = 100.0
+        aggregates["orphan_pct"] = 0.0
+
+    if lag_values_all:
+        aggregates["p95_ingest_lag_min"] = float(
+            polars.Series(lag_values_all).quantile(0.95, interpolation="higher")
+        )
+    else:
+        aggregates["p95_ingest_lag_min"] = 0.0
+
+    return {"tables": tables, "aggregates": aggregates}
 
 
 __all__ = [
@@ -2075,6 +3095,8 @@ __all__ = [
     "detect_null_spikes",
     "evaluate_slos",
     "TableMetricConfig",
+    "ForeignKeySpec",
+    "TableHealthSpec",
     "compute_table_metrics",
     "compute_data_health",
     "validate_warehouse_schema",
@@ -2082,6 +3104,8 @@ __all__ = [
     "validate_quality_targets",
     "validate_seasonality_targets",
     "validate_taxonomy_targets",
+    "validate_marketplace_evening_coverage",
+    "validate_marketplace_category_caps",
     "validate_monetization_targets",
     "validate_trajectory_targets",
     "validate_comms_targets",

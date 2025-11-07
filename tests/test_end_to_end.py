@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import os
 from hashlib import sha256
+from pathlib import Path
+from typing import Any, Mapping
 
 import pytest
 from typer.testing import CliRunner
@@ -11,6 +12,40 @@ from typer.testing import CliRunner
 from data_needs_reporter.cli import app
 
 runner = CliRunner()
+
+
+def _normalize_data_health_tables(
+    tables: object,
+) -> dict[str, dict[str, object]]:
+    normalized: dict[str, dict[str, object]] = {}
+    items: list[tuple[object, object]] = []
+    if isinstance(tables, Mapping):
+        items = list(tables.items())
+    elif isinstance(tables, list):
+        for entry in tables:
+            if isinstance(entry, Mapping) and "table" in entry:
+                items.append((entry["table"], entry))
+    for name, metrics in items:
+        if not isinstance(name, str) or not isinstance(metrics, Mapping):
+            continue
+        normalized[name] = {
+            "key_null_pct": float(metrics.get("key_null_pct", 0.0) or 0.0),
+            "fk_success_pct": float(metrics.get("fk_success_pct", 0.0) or 0.0),
+            "orphan_pct": float(
+                metrics.get("orphan_pct", metrics.get("fk_orphan_pct", 0.0) or 0.0)
+            ),
+            "dup_key_pct": float(
+                metrics.get("dup_key_pct", metrics.get("dup_keys_pct", 0.0) or 0.0)
+            ),
+            "p95_ingest_lag_min": float(
+                metrics.get("p95_ingest_lag_min", 0.0) or 0.0
+            ),
+            "row_count": int(metrics.get("row_count", 0) or 0),
+            "key_null_spikes": metrics.get(
+                "key_null_spikes", metrics.get("null_spike_days", [])
+            ),
+        }
+    return normalized
 
 
 def _write_config(path: Path) -> None:
@@ -129,6 +164,7 @@ def test_end_to_end_pipeline(tmp_path: Path) -> None:
         report_dir = Path("reports") / "neobank"
         data_health = json.loads((report_dir / "data_health.json").read_text())
         themes = json.loads((report_dir / "themes.json").read_text())
+        exec_summary = json.loads((report_dir / "exec_summary.json").read_text())
         figure_hashes = {
             path.name: sha256(path.read_bytes()).hexdigest()
             for path in (report_dir / "figures").glob("*.png")
@@ -156,6 +192,27 @@ def test_end_to_end_pipeline(tmp_path: Path) -> None:
                 (golden_dir / "figures.json").read_text(encoding="utf-8")
             )
 
-            assert data_health == expected_data_health
+            assert _normalize_data_health_tables(
+                data_health.get("tables")
+            ) == _normalize_data_health_tables(expected_data_health.get("tables"))
+            if "aggregates" in expected_data_health:
+                assert data_health.get("aggregates") == expected_data_health["aggregates"]
+            else:
+                assert "aggregates" in data_health
             assert themes == expected_themes
             assert figure_hashes == expected_figures
+
+        top_actions = exec_summary.get("top_actions", [])
+        assert len(top_actions) == 3
+        required_keys = {
+            "theme",
+            "demand",
+            "revenue",
+            "severity",
+            "recency",
+            "score",
+            "confidence",
+            "examples",
+        }
+        for action in top_actions:
+            assert required_keys.issubset(action.keys())

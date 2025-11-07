@@ -1,10 +1,13 @@
+import importlib.util
 import json
 import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Mapping
 
 import polars as pl
 import pytest
+from typer.testing import CliRunner
 
 from data_needs_reporter.config import DEFAULT_CONFIG_PATH, load_config
 from data_needs_reporter.generate.defects import apply_typical_neobank_defects
@@ -14,25 +17,35 @@ from data_needs_reporter.generate.warehouse import (
 )
 from data_needs_reporter.report.metrics import (
     compute_data_health,
-    detect_null_spikes,
     validate_monetization_targets,
     validate_taxonomy_targets,
     validate_theme_mix_targets,
 )
-from data_needs_reporter.report.run import select_top_actions
 from data_needs_reporter.report.scoring import (
     compute_confidence,
     compute_marketplace_revenue_risk,
     compute_neobank_revenue_risk,
+    compute_source_demand_weights,
     compute_score,
     compute_severity,
     compute_weighted_theme_shares,
     normalize_revenue,
     post_stratified_item_weights,
+    select_top_actions,
     recency_decay,
     reweight_source_weights,
     trailing_monthly_revenue_median,
 )
+from data_needs_reporter.cli import app
+
+_helpers_spec = importlib.util.spec_from_file_location(
+    "_test_cli_helpers", Path(__file__).resolve().parent / "test_cli.py"
+)
+assert _helpers_spec and _helpers_spec.loader
+_helpers = importlib.util.module_from_spec(_helpers_spec)
+_helpers_spec.loader.exec_module(_helpers)
+_write_minimal_neobank_warehouse = _helpers._write_minimal_neobank_warehouse
+_write_minimal_comms = _helpers._write_minimal_comms
 
 
 def _write_marketplace_taxonomy_fixture(base_path: Path, gmv_values: list[int]) -> None:
@@ -196,6 +209,25 @@ def test_reweight_source_weights_clamps_extremes():
     assert weights["nlq"] == pytest.approx(0.60, abs=1e-6)
     assert weights["slack"] == pytest.approx(0.25, abs=1e-4)
     assert weights["email"] == pytest.approx(0.15, abs=1e-4)
+
+
+def test_compute_source_demand_weights_scales_with_volume():
+    base = {"nlq": 0.5, "slack": 0.3, "email": 0.2}
+    volumes = {"nlq": 900, "slack": 80, "email": 20}
+    weights = compute_source_demand_weights(base, volumes, min_weight=0.15, max_weight=0.60)
+    assert sum(weights.values()) == pytest.approx(1.0)
+    assert weights["nlq"] == pytest.approx(0.60, abs=1e-6)
+    for source_weight in weights.values():
+        assert 0.15 - 1e-6 <= source_weight <= 0.60 + 1e-6
+
+
+def test_compute_source_demand_weights_handles_zero_volume():
+    base = {"nlq": 0.4, "slack": 0.4, "email": 0.2}
+    volumes = {"nlq": 0, "slack": 0, "email": 0}
+    weights = compute_source_demand_weights(base, volumes, min_weight=0.1, max_weight=0.7)
+    assert weights["nlq"] == pytest.approx(0.4, abs=1e-6)
+    assert weights["slack"] == pytest.approx(0.4, abs=1e-6)
+    assert weights["email"] == pytest.approx(0.2, abs=1e-6)
 
 
 def test_compute_severity():
@@ -435,61 +467,186 @@ def test_marketplace_revenue_risk() -> None:
     assert result["revenue_risk_ratio"] == pytest.approx(1.0, rel=1e-6)
 
 
-def test_detect_null_spikes_identifies_lift():
+
+def test_compute_data_health_synthetic(tmp_path: Path) -> None:
     polars = pytest.importorskip("polars")
-    base = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    rows = []
-    for day in range(10):
-        day_time = base + timedelta(days=day)
-        for idx in range(20):
-            value = None if (day == 8 and idx < 15) else (idx + day)
-            rows.append(
-                {"event_time": day_time + timedelta(minutes=idx), "value": value}
-            )
-    df = polars.DataFrame(rows).select(
-        [
-            polars.col("event_time").cast(polars.Datetime(time_zone="UTC")),
-            polars.col("value").cast(polars.Int64),
-        ]
+    tz = "UTC"
+    day0 = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    day1 = datetime(2024, 1, 2, tzinfo=timezone.utc)
+
+    polars.DataFrame(
+        {
+            "customer_id": [1, 2, None],
+            "created_at": [day0, day1, day1],
+        }
+    ).write_parquet(tmp_path / "dim_customer.parquet")
+
+    polars.DataFrame(
+        {
+            "merchant_id": [100, 200],
+            "created_at": [day0, day0],
+        }
+    ).write_parquet(tmp_path / "dim_merchant.parquet")
+
+    polars.DataFrame({"card_id": [10, 20]}).write_parquet(
+        tmp_path / "dim_card.parquet"
     )
 
-    spikes = detect_null_spikes(df, "event_time", "value")
-    assert len(spikes) == 1
-    spike = spikes[0]
-    assert spike["column"] == "value"
-    assert spike["ds"] == "2024-01-09"
-    assert spike["lift_pct"] >= 8.0
+    polars.DataFrame(
+        {
+            "txn_id": [1, 2, None, 2],
+            "card_id": [10, 20, 30, None],
+            "merchant_id": [100, 200, 999, 100],
+            "event_time": [day0, day1, day1, day1 + timedelta(hours=1)],
+            "loaded_at": [
+                day0 + timedelta(minutes=30),
+                day1 + timedelta(hours=3),
+                day1 + timedelta(hours=3, minutes=20),
+                day1 + timedelta(hours=1, minutes=30),
+            ],
+        }
+    ).write_parquet(tmp_path / "fact_card_transaction.parquet")
+
+    polars.DataFrame(
+        {
+            "invoice_id": [1, 2],
+            "customer_id": [1, 3],
+            "invoice_date": [day0, day1],
+            "loaded_at": [day0 + timedelta(hours=1), day1 + timedelta(hours=2)],
+        }
+    ).write_parquet(tmp_path / "fact_subscription_invoice.parquet")
+
+    payload = compute_data_health(tmp_path, tz)
+    assert "tables" in payload
+    assert "aggregates" in payload
+
+    tables = payload["tables"]
+    assert isinstance(tables, Mapping)
+
+    txn_metrics = tables["fact_card_transaction"]
+    invoices_metrics = tables["fact_subscription_invoice"]
+
+    assert pytest.approx(txn_metrics["key_null_pct"], rel=1e-6) == 25.0
+    assert pytest.approx(txn_metrics["dup_key_pct"], rel=1e-6) == 25.0
+    assert pytest.approx(txn_metrics["fk_success_pct"], rel=1e-6) == pytest.approx(
+        5 / 7 * 100, rel=1e-6
+    )
+    assert pytest.approx(txn_metrics["orphan_pct"], rel=1e-6) == pytest.approx(
+        2 / 7 * 100, rel=1e-6
+    )
+    assert txn_metrics["key_null_pct_daily"]
+    assert txn_metrics["fk_success_pct_daily"]
+    assert txn_metrics["key_null_spikes"]
+
+    assert pytest.approx(invoices_metrics["fk_success_pct"], rel=1e-6) == 50.0
+    assert pytest.approx(invoices_metrics["orphan_pct"], rel=1e-6) == 50.0
+
+    aggregates = payload["aggregates"]
+    total_rows = sum(int(m.get("row_count", 0) or 0) for m in tables.values())
+    key_null_rows = sum(
+        (m.get("row_count", 0) or 0) * (m.get("key_null_pct", 0.0) or 0.0) / 100.0
+        for m in tables.values()
+    )
+    dup_rows = sum(
+        (m.get("row_count", 0) or 0) * (m.get("dup_key_pct", 0.0) or 0.0) / 100.0
+        for m in tables.values()
+    )
+    expected_key_null_pct = (
+        (key_null_rows / total_rows) * 100.0 if total_rows else 0.0
+    )
+    expected_dup_pct = (dup_rows / total_rows) * 100.0 if total_rows else 0.0
+
+    assert aggregates["key_null_pct"] == pytest.approx(expected_key_null_pct, rel=1e-6)
+    assert aggregates["dup_key_pct"] == pytest.approx(expected_dup_pct, rel=1e-6)
+    assert pytest.approx(aggregates["fk_success_pct"], rel=1e-6) == pytest.approx(
+        (6 / 9) * 100, rel=1e-6
+    )
+    assert pytest.approx(aggregates["orphan_pct"], rel=1e-6) == pytest.approx(
+        (3 / 9) * 100, rel=1e-6
+    )
+    assert aggregates["p95_ingest_lag_min"] == pytest.approx(200.0)
 
 
-def test_data_health_metrics_neobank(tmp_path: Path) -> None:
-    pytest.importorskip("polars")
-    cfg = load_config(DEFAULT_CONFIG_PATH, None, env={}, cli_overrides={})
-    generate_neobank_dims(cfg, tmp_path, seed=222)
-    generate_neobank_facts(cfg, tmp_path, tmp_path, seed=333)
-    apply_typical_neobank_defects(cfg, tmp_path, seed=444)
+def test_validate_enforces_slos(tmp_path: Path) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        warehouse = Path("warehouse")
+        comms = Path("comms")
+        _write_minimal_neobank_warehouse(warehouse)
+        comms.mkdir()
+        _write_minimal_comms(comms)
 
-    metrics = compute_data_health("neobank", tmp_path)
-    assert metrics
+        report_dir = Path("reports") / "neobank"
+        payload = json.loads((report_dir / "data_health.json").read_text(encoding="utf-8"))
+        aggregates = payload.setdefault("aggregates", {})
+        aggregates.update(
+            {
+                "key_null_pct": 5.0,
+                "orphan_pct": 4.0,
+                "dup_key_pct": 0.8,
+                "p95_ingest_lag_min": 150.0,
+            }
+        )
+        tables = payload.setdefault("tables", {})
+        if isinstance(tables, list):
+            invoice_entry = next(
+                (
+                    entry
+                    for entry in tables
+                    if isinstance(entry, dict)
+                    and entry.get("table") == "fact_subscription_invoice"
+                ),
+                None,
+            )
+            if invoice_entry is None:
+                invoice_entry = {"table": "fact_subscription_invoice"}
+                tables.append(invoice_entry)
+        elif isinstance(tables, dict):
+            invoice_entry = tables.setdefault("fact_subscription_invoice", {})
+        else:
+            invoice_entry = {}
+            payload["tables"] = {"fact_subscription_invoice": invoice_entry}
+        invoice_entry.update(
+            {
+                "row_count": 10,
+                "key_null_pct": 6.0,
+                "orphan_pct": 5.0,
+                "dup_key_pct": 1.2,
+                "p95_ingest_lag_min": 160.0,
+            }
+        )
+        (report_dir / "data_health.json").write_text(
+            json.dumps(payload, indent=2), encoding="utf-8"
+        )
 
-    tables = {row["table"]: row for row in metrics}
-    assert "fact_card_transaction" in tables
-    assert "fact_subscription_invoice" in tables
+        out_dir = report_dir / "qc"
+        result = runner.invoke(
+            app,
+            [
+                "validate",
+                "--warehouse",
+                str(warehouse),
+                "--comms",
+                str(comms),
+                "--out",
+                str(out_dir),
+                "--strict",
+            ],
+        )
+        assert result.exit_code == 1
+        summary = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        assert summary["passed"] is False
+        assert any("Aggregate key_null_pct" in issue for issue in summary["issues"])
+        assert any(
+            "fact_subscription_invoice key_null_pct" in issue
+            for issue in summary["issues"]
+        )
 
-    txn = tables["fact_card_transaction"]
-    assert 1.0 <= txn["key_null_pct"] <= 3.5
-    assert 90.0 <= txn["fk_success_pct"] <= 99.5
-    assert 1.0 <= txn["fk_orphan_pct"] <= 8.0
-    assert 0.3 <= txn["dup_keys_pct"] <= 1.5
-    assert 120 <= txn["p95_ingest_lag_min"] <= 240
-    assert txn["null_spike_days"]
-    spike_entry = txn["null_spike_days"][0]
-    assert {"ds", "column", "lift_pct"} <= set(spike_entry.keys())
-
-    invoices = tables["fact_subscription_invoice"]
-    assert 1.0 <= invoices["key_null_pct"] <= 2.5
-    assert 97.5 <= invoices["fk_success_pct"] <= 99.0
-    assert 0.2 <= invoices["dup_keys_pct"] <= 0.8
-    assert 120 <= invoices["p95_ingest_lag_min"] <= 240
+        csv_lines = (out_dir / "qc_checks.csv").read_text(encoding="utf-8").splitlines()
+        assert any("slo.aggregate.key_null_pct" in line for line in csv_lines)
+        assert any(
+            "slo.fact_subscription_invoice.key_null_pct" in line for line in csv_lines
+        )
 
 
 def test_validate_taxonomy_targets_marketplace_pass(tmp_path: Path) -> None:

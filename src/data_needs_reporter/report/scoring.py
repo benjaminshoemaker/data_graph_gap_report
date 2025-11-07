@@ -6,6 +6,13 @@ from datetime import datetime
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 
+DEFAULT_SOURCE_WEIGHTS: Dict[str, float] = {
+    "nlq": 0.50,
+    "slack": 0.30,
+    "email": 0.20,
+}
+
+
 @dataclass
 class ScoringWeights:
     revenue: float = 0.60
@@ -79,6 +86,96 @@ def trailing_monthly_revenue_median(
     return trailing_median(values, window=len(values))
 
 
+def _apply_weight_bounds(
+    normalized_weights: Mapping[str, float],
+    min_weight: float,
+    max_weight: float,
+) -> Dict[str, float]:
+    if not normalized_weights:
+        return {}
+
+    weights: Dict[str, float] = {
+        source: min(max(float(weight), min_weight), max_weight)
+        for source, weight in normalized_weights.items()
+    }
+
+    total = sum(weights.values())
+    if total <= 0.0:
+        uniform = 1.0 / len(normalized_weights)
+        return {source: uniform for source in normalized_weights}
+
+    eps = 1e-9
+    if total > 1.0 + eps:
+        surplus = total - 1.0
+        adjustable = {
+            source: weights[source] - min_weight
+            for source in weights
+            if weights[source] - min_weight > eps
+        }
+        while surplus > eps and adjustable:
+            total_room = sum(adjustable.values())
+            if total_room <= eps:
+                break
+            for source in list(adjustable):
+                weight_room = adjustable[source]
+                if weight_room <= 0.0:
+                    del adjustable[source]
+                    continue
+                share = surplus * (weight_room / total_room)
+                reduction = min(weight_room, share)
+                weights[source] -= reduction
+                surplus -= reduction
+                new_room = weights[source] - min_weight
+                if new_room <= eps:
+                    adjustable.pop(source, None)
+                else:
+                    adjustable[source] = new_room
+                if surplus <= eps:
+                    break
+    elif total < 1.0 - eps:
+        deficit = 1.0 - total
+        adjustable = {
+            source: max_weight - weights[source]
+            for source in weights
+            if max_weight - weights[source] > eps
+        }
+        while deficit > eps and adjustable:
+            total_room = sum(adjustable.values())
+            if total_room <= eps:
+                break
+            for source in list(adjustable):
+                weight_room = adjustable[source]
+                if weight_room <= 0.0:
+                    del adjustable[source]
+                    continue
+                share = deficit * (weight_room / total_room)
+                addition = min(weight_room, share)
+                weights[source] += addition
+                deficit -= addition
+                new_room = max_weight - weights[source]
+                if new_room <= eps:
+                    adjustable.pop(source, None)
+                else:
+                    adjustable[source] = new_room
+                if deficit <= eps:
+                    break
+
+    total = sum(weights.values())
+    if total <= 0.0:
+        uniform = 1.0 / len(normalized_weights)
+        return {source: uniform for source in normalized_weights}
+    if not math.isclose(total, 1.0, abs_tol=1e-6):
+        scale = 1.0 / total
+        for source in weights:
+            weights[source] = max(
+                min(weights[source] * scale, max_weight),
+                min_weight,
+            )
+
+    final_total = sum(weights.values()) or 1.0
+    return {source: weights[source] / final_total for source in weights}
+
+
 def reweight_source_weights(
     base_weights: Mapping[str, float],
     observed_volumes: Mapping[str, int],
@@ -112,82 +209,60 @@ def reweight_source_weights(
 
     normalized = {source: weight / raw_sum for source, weight in raw_weights.items()}
 
-    weights: Dict[str, float] = {
-        source: min(max(weight, min_weight), max_weight)
-        for source, weight in normalized.items()
-    }
+    return _apply_weight_bounds(normalized, min_weight, max_weight)
 
-    total = sum(weights.values())
-    if total <= 0.0:
-        uniform = 1.0 / len(base_weights)
-        return {source: uniform for source in base_weights}
 
-    eps = 1e-9
-    if total > 1.0 + eps:
-        surplus = total - 1.0
-        adjustable = {
-            source: weights[source] - min_weight
-            for source in weights
-            if weights[source] > min_weight + eps
+def compute_source_demand_weights(
+    base_weights: Mapping[str, float],
+    volumes: Mapping[str, int],
+    min_weight: float,
+    max_weight: float,
+) -> Dict[str, float]:
+    """
+    Scale base source weights by observed demand volumes with clamped normalization.
+    """
+    combined: Dict[str, float] = dict(DEFAULT_SOURCE_WEIGHTS)
+    for source, weight in base_weights.items():
+        try:
+            combined[source] = float(weight)
+        except (TypeError, ValueError):
+            continue
+    cleaned: Dict[str, float] = {}
+    for source, weight in combined.items():
+        value = max(weight, 0.0)
+        if value > 0.0:
+            cleaned[source] = value
+    if not cleaned:
+        cleaned = dict(DEFAULT_SOURCE_WEIGHTS)
+
+    base_total = sum(cleaned.values()) or 1.0
+    normalized_base = {source: weight / base_total for source, weight in cleaned.items()}
+
+    def _volume_value(source: str) -> float:
+        try:
+            return max(float(volumes.get(source, 0)), 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    total_volume = sum(_volume_value(source) for source in normalized_base)
+    if total_volume <= 0:
+        raw = dict(normalized_base)
+    else:
+        raw = {
+            source: normalized_base[source]
+            * (_volume_value(source) / total_volume)
+            for source in normalized_base
         }
-        while surplus > eps and adjustable:
-            total_room = sum(adjustable.values())
-            if total_room <= eps:
-                break
-            for source in list(adjustable):
-                weight_room = adjustable[source]
-                if weight_room <= 0.0:
-                    del adjustable[source]
-                    continue
-                share = surplus * (weight_room / total_room)
-                reduction = min(weight_room, share)
-                weights[source] -= reduction
-                surplus -= reduction
-                adjustable[source] = weights[source] - min_weight
-                if adjustable[source] <= eps:
-                    del adjustable[source]
-                if surplus <= eps:
-                    break
-    elif total < 1.0 - eps:
-        deficit = 1.0 - total
-        adjustable = {
-            source: max_weight - weights[source]
-            for source in weights
-            if max_weight - weights[source] > eps
-        }
-        while deficit > eps and adjustable:
-            total_room = sum(adjustable.values())
-            if total_room <= eps:
-                break
-            for source in list(adjustable):
-                weight_room = adjustable[source]
-                if weight_room <= 0.0:
-                    del adjustable[source]
-                    continue
-                share = deficit * (weight_room / total_room)
-                addition = min(weight_room, share)
-                weights[source] += addition
-                deficit -= addition
-                adjustable[source] = max_weight - weights[source]
-                if adjustable[source] <= eps:
-                    del adjustable[source]
-                if deficit <= eps:
-                    break
 
-    total = sum(weights.values())
-    if total <= 0.0:
-        uniform = 1.0 / len(base_weights)
-        return {source: uniform for source in base_weights}
-    if not math.isclose(total, 1.0, abs_tol=1e-6):
-        scale = 1.0 / total
-        for source in weights:
-            weights[source] = max(
-                min(weights[source] * scale, max_weight),
-                min_weight,
-            )
+    raw_sum = sum(raw.values())
+    if raw_sum <= 0.0:
+        raw = dict(normalized_base)
+        raw_sum = sum(raw.values())
+    normalized = {source: weight / raw_sum for source, weight in raw.items()}
 
-    final_total = sum(weights.values()) or 1.0
-    return {source: weights[source] / final_total for source in weights}
+    min_weight = max(0.0, min_weight)
+    max_weight = max(min_weight, max_weight)
+    return _apply_weight_bounds(normalized, min_weight, max_weight)
 
 
 def compute_severity(overages: Mapping[str, float], slos: Mapping[str, float]) -> float:
@@ -213,10 +288,11 @@ def compute_score(
     weights: Optional[ScoringWeights] = None,
 ) -> float:
     w = weights or ScoringWeights()
+    clamp = lambda value: max(min(float(value), 1.0), 0.0)
     return (
-        w.revenue * revenue_score
-        + w.demand * demand_score
-        + w.severity * severity_score
+        w.revenue * clamp(revenue_score)
+        + w.demand * clamp(demand_score)
+        + w.severity * clamp(severity_score)
     )
 
 
@@ -232,6 +308,55 @@ def compute_confidence(
         + 0.20 * max(min(coverage, 1.0), 0.0)
         + 0.10 * max(min(agreement, 1.0), 0.0)
     )
+
+
+def select_top_actions(
+    items: Sequence[Mapping[str, object]],
+    k: int = 3,
+    min_diversity: int = 3,
+    min_confidence: float = 0.55,
+) -> List[Mapping[str, object]]:
+    """Select top actions enforcing theme diversity before filling remaining slots."""
+    if k <= 0 or not items:
+        return []
+
+    eligible = [
+        item
+        for item in items
+        if float(item.get("confidence", 0.0) or 0.0) >= min_confidence
+    ]
+    if not eligible:
+        return []
+
+    sorted_items = sorted(
+        eligible,
+        key=lambda item: float(item.get("score", 0.0) or 0.0),
+        reverse=True,
+    )
+    diversity_target = min(max(min_diversity, 1), k)
+    selected: List[Mapping[str, object]] = []
+    seen_indices: set[int] = set()
+    seen_themes: set[str] = set()
+
+    for idx, item in enumerate(sorted_items):
+        theme = str(item.get("theme") or "").strip().lower()
+        if theme and theme in seen_themes:
+            continue
+        selected.append(item)
+        seen_indices.add(idx)
+        seen_themes.add(theme)
+        if len(selected) >= diversity_target:
+            break
+
+    if len(selected) < k:
+        for idx, item in enumerate(sorted_items):
+            if idx in seen_indices:
+                continue
+            selected.append(item)
+            if len(selected) >= k:
+                break
+
+    return selected[:k]
 
 
 def post_stratified_item_weights(
@@ -543,10 +668,12 @@ __all__ = [
     "normalize_revenue",
     "trailing_monthly_revenue_median",
     "reweight_source_weights",
+    "compute_source_demand_weights",
     "compute_severity",
     "recency_decay",
     "compute_score",
     "compute_confidence",
+    "select_top_actions",
     "post_stratified_item_weights",
     "compute_weighted_theme_shares",
     "compute_neobank_revenue_risk",

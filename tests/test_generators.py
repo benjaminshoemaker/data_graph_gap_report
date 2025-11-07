@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Sequence
 
 import pytest
 from typer.testing import CliRunner
@@ -24,13 +25,65 @@ from data_needs_reporter.generate.warehouse import (
     generate_neobank_facts,
     write_empty_warehouse,
 )
+import data_needs_reporter.report.metrics as metrics_mod
 from data_needs_reporter.report.llm import MockProvider, RepairingLLMClient
+from data_needs_reporter.report.metrics import validate_comms_targets
 from data_needs_reporter.utils.cost_guard import CostGuard
 from data_needs_reporter.utils.io import read_json
 
 pl = pytest.importorskip("polars")
 
 runner = CliRunner()
+
+
+def _write_small_comms_dataset(
+    base_path: Path,
+    slack_buckets: Sequence[str],
+    email_buckets: Sequence[str],
+    nlq_buckets: Sequence[str],
+) -> None:
+    base_path.mkdir(parents=True, exist_ok=True)
+    slack_df = pl.DataFrame(
+        {
+            "message_id": list(range(1, len(slack_buckets) + 1)),
+            "thread_id": list(range(1, len(slack_buckets) + 1)),
+            "bucket": list(slack_buckets),
+            "is_exec": [
+                idx < max(1, len(slack_buckets) // 8)
+                for idx in range(len(slack_buckets))
+            ],
+        }
+    )
+    slack_df.write_parquet(base_path / "slack_messages.parquet")
+
+    email_df = pl.DataFrame(
+        {
+            "message_id": list(range(1, len(email_buckets) + 1)),
+            "thread_id": list(range(1, len(email_buckets) + 1)),
+            "bucket": list(email_buckets),
+        }
+    )
+    email_df.write_parquet(base_path / "email_messages.parquet")
+
+    nlq_df = pl.DataFrame(
+        {
+            "query_id": list(range(1, len(nlq_buckets) + 1)),
+            "bucket": list(nlq_buckets),
+            "tokens": [10] * len(nlq_buckets),
+        }
+    )
+    nlq_df.write_parquet(base_path / "nlq.parquet")
+
+    users = pl.DataFrame(
+        {
+            "user_id": [1],
+            "role": ["executive"],
+            "department": ["ops"],
+            "time_zone": ["UTC"],
+            "active": [True],
+        }
+    )
+    users.write_parquet(base_path / "comms_users.parquet")
 
 
 def test_write_empty_neobank_warehouse(tmp_path: Path) -> None:
@@ -333,3 +386,42 @@ def test_comms_filters_link_domains(
 
 def test_comm_user_role_mix_sums_to_one() -> None:
     assert pytest.approx(sum(COMM_USER_ROLE_MIX.values()), rel=1e-6) == 1.0
+
+
+def test_validate_comms_targets_small_dataset_pass(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    comms_path = tmp_path / "comms"
+    slack = ["data_quality", "governance", "analytics", "pipeline_health"]
+    email = ["data_quality", "data_quality", "governance", "pipeline_health"]
+    nlq = ["analytics", "governance", "pipeline_health", "data_quality"]
+    _write_small_comms_dataset(comms_path, slack, email, nlq)
+    volume_spec = {
+        "slack_messages.parquet": (len(slack), len(slack)),
+        "email_messages.parquet": (len(email), len(email)),
+        "nlq.parquet": (len(nlq), len(nlq)),
+    }
+    monkeypatch.setattr(metrics_mod, "COMMS_VOLUME_SPEC", volume_spec)
+    monkeypatch.setattr(metrics_mod, "EXEC_THREAD_SHARE_RANGE", (0.0, 1.0))
+    result = validate_comms_targets(comms_path)
+    assert result["passed"] is True
+
+
+def test_validate_comms_targets_small_dataset_fail(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    comms_path = tmp_path / "comms"
+    slack = ["data_quality"] * 9 + ["pipeline_health"]
+    email = ["data_quality", "pipeline_health", "pipeline_health", "analytics"]
+    nlq = ["analytics", "governance", "data_quality", "pipeline_health"]
+    _write_small_comms_dataset(comms_path, slack, email, nlq)
+    volume_spec = {
+        "slack_messages.parquet": (len(slack), len(slack)),
+        "email_messages.parquet": (len(email), len(email)),
+        "nlq.parquet": (len(nlq), len(nlq)),
+    }
+    monkeypatch.setattr(metrics_mod, "COMMS_VOLUME_SPEC", volume_spec)
+    monkeypatch.setattr(metrics_mod, "EXEC_THREAD_SHARE_RANGE", (0.0, 1.0))
+    result = validate_comms_targets(comms_path)
+    assert result["passed"] is False
+    assert "bucket" in result["detail"]

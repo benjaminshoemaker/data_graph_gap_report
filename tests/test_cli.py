@@ -93,15 +93,18 @@ def _write_minimal_neobank_warehouse(path: Path) -> None:
             entry["rows"] = row_count
         manifest["tables"][table_name] = entry
     (path / "schema.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    base_weekday = datetime(2024, 1, 1, tzinfo=timezone.utc)  # Monday
-    weekend_day = base_weekday + timedelta(days=5)  # Saturday
+    local_tz = timezone(timedelta(hours=-8))
+    base_weekday_local = datetime(2024, 1, 1, tzinfo=local_tz)  # Monday
+    weekend_day_local = base_weekday_local + timedelta(days=5)  # Saturday
+    base_weekday = base_weekday_local.astimezone(timezone.utc)
     records = []
     txn_id = 1
-    for day, total in [(base_weekday, 10), (weekend_day, 12)]:
+    for day_local, total in [(base_weekday_local, 10), (weekend_day_local, 12)]:
         per_hour = max(total // 2, 1)
         for hour in (11, 18):
             for _ in range(per_hour):
-                event_time = day + timedelta(hours=hour)
+                event_local = day_local + timedelta(hours=hour)
+                event_time = event_local.astimezone(timezone.utc)
                 records.append(
                     {
                         "txn_id": txn_id,
@@ -181,6 +184,29 @@ def _write_minimal_neobank_warehouse(path: Path) -> None:
             )
             invoice_id += 1
     pl.DataFrame(invoices).write_parquet(path / "fact_subscription_invoice.parquet")
+
+    report_dir = Path("reports") / "neobank"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    baseline_health = {
+        "aggregates": {
+            "key_null_pct": 0.0,
+            "orphan_pct": 0.0,
+            "dup_key_pct": 0.0,
+            "p95_ingest_lag_min": 0.0,
+        },
+        "tables": {
+            "fact_subscription_invoice": {
+                "row_count": len(invoices),
+                "key_null_pct": 0.0,
+                "orphan_pct": 0.0,
+                "dup_key_pct": 0.0,
+                "p95_ingest_lag_min": 0.0,
+            }
+        },
+    }
+    (report_dir / "data_health.json").write_text(
+        json.dumps(baseline_health, indent=2), encoding="utf-8"
+    )
 
     write_warehouse_hash_manifest(path, seed=42)
 
@@ -371,6 +397,35 @@ def _write_minimal_comms(path: Path) -> None:
     )
 
 
+def _inject_gmv_jump(tx_path: Path, ratio: float = 6.0) -> datetime:
+    df = pl.read_parquet(tx_path)
+    if "event_time" not in df.columns:
+        raise AssertionError("fact_card_transaction must include event_time")
+    day_series = (
+        df.select(pl.col("event_time").dt.truncate("1d").alias("_day"))
+        .to_series()
+        .to_list()
+    )
+    unique_days = sorted({day for day in day_series if isinstance(day, datetime)})
+    if len(unique_days) < 2:
+        raise AssertionError("Expected at least two distinct event days for GMV test.")
+    day_one, day_two = unique_days[:2]
+    base_amount = 50_000
+    spike_amount = int(base_amount * ratio)
+    adjusted = df.with_columns(
+        pl.when(pl.col("event_time").dt.truncate("1d") == pl.lit(day_one))
+        .then(pl.lit(base_amount))
+        .otherwise(
+            pl.when(pl.col("event_time").dt.truncate("1d") == pl.lit(day_two))
+            .then(pl.lit(spike_amount))
+            .otherwise(pl.col("amount_cents"))
+        )
+        .alias("amount_cents")
+    )
+    adjusted.write_parquet(tx_path)
+    return day_two
+
+
 def test_version_flag_reports_package_version() -> None:
     from data_needs_reporter import __version__
 
@@ -436,14 +491,15 @@ def test_run_report_generates_outputs(tmp_path: Path) -> None:
 
         payload = json.loads(data_health_json.read_text(encoding="utf-8"))
         assert "tables" in payload
-        assert isinstance(payload["tables"], list)
-        assert payload["tables"]
-        first_table = payload["tables"][0]
+        tables_section = payload["tables"]
+        assert isinstance(tables_section, dict)
+        assert tables_section
+        first_table = next(iter(tables_section.values()))
         for key in [
-            "table",
             "key_null_pct",
-            "fk_orphan_pct",
-            "dup_keys_pct",
+            "fk_success_pct",
+            "orphan_pct",
+            "dup_key_pct",
             "p95_ingest_lag_min",
         ]:
             assert key in first_table
@@ -933,6 +989,77 @@ def test_validate_strict_fails_on_trajectory(tmp_path: Path) -> None:
         assert trajectory_check["passed"] is False
 
 
+def test_validate_strict_fails_on_trajectory_gmv_jump(tmp_path: Path) -> None:
+    with runner.isolated_filesystem():
+        warehouse = Path("warehouse")
+        comms = Path("comms")
+        _write_minimal_neobank_warehouse(warehouse)
+        comms.mkdir()
+        _write_minimal_comms(comms)
+        tx_path = warehouse / "fact_card_transaction.parquet"
+        spike_day = _inject_gmv_jump(tx_path)
+        out_dir = Path("reports") / "neobank" / "qc"
+        result = runner.invoke(
+            app,
+            [
+                "validate",
+                "--warehouse",
+                str(warehouse),
+                "--comms",
+                str(comms),
+                "--out",
+                str(out_dir),
+                "--strict",
+            ],
+        )
+        assert result.exit_code == 1
+        summary = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        trajectory_check = next(
+            check for check in summary["checks"] if check["name"] == "trajectory"
+        )
+        assert trajectory_check["passed"] is False
+        assert "GMV" in str(trajectory_check["detail"])
+        assert spike_day.date().isoformat() in str(trajectory_check["detail"])
+
+
+def test_validate_allows_trajectory_event_for_jump(tmp_path: Path) -> None:
+    with runner.isolated_filesystem():
+        warehouse = Path("warehouse")
+        comms = Path("comms")
+        _write_minimal_neobank_warehouse(warehouse)
+        comms.mkdir()
+        _write_minimal_comms(comms)
+        tx_path = warehouse / "fact_card_transaction.parquet"
+        spike_day = _inject_gmv_jump(tx_path)
+        event_path = warehouse / "trajectory_events.json"
+        payload = {"events": [{"day": spike_day.date().isoformat(), "label": "promo"}]}
+        event_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        out_dir = Path("reports") / "neobank" / "qc"
+        result = runner.invoke(
+            app,
+            [
+                "validate",
+                "--warehouse",
+                str(warehouse),
+                "--comms",
+                str(comms),
+                "--out",
+                str(out_dir),
+                "--strict",
+            ],
+        )
+        assert result.exit_code == 1
+        summary = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        trajectory_check = next(
+            check for check in summary["checks"] if check["name"] == "trajectory"
+        )
+        assert trajectory_check["passed"] is True
+        repro_check = next(
+            check for check in summary["checks"] if check["name"] == "reproducibility"
+        )
+        assert repro_check["passed"] is False
+
+
 def test_validate_strict_fails_on_theme_mix(tmp_path: Path) -> None:
     with runner.isolated_filesystem():
         warehouse = Path("warehouse")
@@ -977,6 +1104,45 @@ def test_validate_strict_fails_on_theme_mix(tmp_path: Path) -> None:
             check for check in summary_out["checks"] if check["name"] == "theme_mix"
         )
         assert theme_mix_check["passed"] is False
+
+
+def test_validate_strict_fails_on_bucket_mix_per_source(tmp_path: Path) -> None:
+    with runner.isolated_filesystem():
+        warehouse = Path("warehouse")
+        comms = Path("comms")
+        _write_minimal_neobank_warehouse(warehouse)
+        comms.mkdir()
+        _write_minimal_comms(comms)
+        slack_path = comms / "slack_messages.parquet"
+        slack_df = pl.read_parquet(slack_path)
+        skewed = slack_df.with_columns(
+            pl.when((pl.col("message_id") % 1000) < 50)
+            .then(pl.lit("pipeline_health"))
+            .otherwise(pl.lit("data_quality"))
+            .alias("bucket")
+        )
+        skewed.write_parquet(slack_path)
+        out_dir = Path("reports") / "neobank" / "qc"
+        result = runner.invoke(
+            app,
+            [
+                "validate",
+                "--warehouse",
+                str(warehouse),
+                "--comms",
+                str(comms),
+                "--out",
+                str(out_dir),
+                "--strict",
+            ],
+        )
+        assert result.exit_code == 1
+        summary = json.loads((out_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        comms_check = next(
+            check for check in summary["checks"] if check["name"] == "comms"
+        )
+        assert comms_check["passed"] is False
+        assert "slack bucket" in str(comms_check["detail"])
 
 
 def test_validate_strict_fails_on_event_correlation(tmp_path: Path) -> None:

@@ -306,8 +306,30 @@ def test_pack_thread_prioritizes_score_and_recency():
     )
     selected_ids = {msg["message_id"] for msg in packed["messages"]}
     assert {1, 2}.issubset(selected_ids)
-    assert 4 in selected_ids
+    assert 5 in selected_ids
     assert 3 not in selected_ids
+
+
+def test_pack_thread_estimates_tokens_without_field():
+    now = datetime(2024, 3, 1, tzinfo=timezone.utc)
+    messages = []
+    for idx in range(50):
+        body = "Token heavy message " + ("#" * 200)
+        messages.append(
+            {
+                "message_id": idx + 1,
+                "thread_id": 9,
+                "user_id": idx,
+                "body": body,
+                "sent_at": now + timedelta(minutes=idx),
+                "prefilter_score": 0.5,
+            }
+        )
+    packed = pack_thread(messages, exec_user_ids=None, max_messages=20, max_tokens=900)
+    assert len(packed["messages"]) <= 20
+    assert packed["token_total"] <= 900
+    assert packed["token_limit_hit"] is True
+    assert any(msg["message_id"] == 1 for msg in packed["messages"])
 
 
 def test_entity_extraction_pipeline(
@@ -396,7 +418,7 @@ def test_entity_extraction_pipeline(
 
     out_path = tmp_path / "entities.parquet"
     config = EntityExtractionConfig(cap_usd=0.05)
-    results, stats = run_entity_extraction_for_archetype(
+    results, coverage = run_entity_extraction_for_archetype(
         "neobank",
         client,
         slack_messages=slack_df,
@@ -427,7 +449,9 @@ def test_entity_extraction_pipeline(
     assert nlq_row["columns"]
 
     assert results
-    assert stats["cost_usd"] <= config.cap_usd
+    overall_cov = coverage["overall"]
+    assert overall_cov["with_entities"] >= 2
+    assert 0.0 <= overall_cov["coverage_pct"] <= 1.0
 
 
 def test_classify_threads_and_save_predictions(
@@ -604,3 +628,71 @@ def test_classify_threads_parse_errors_reset_on_success(
     assert predictions[-1]["theme"] == "data_gap"
     # ensure consecutive errors reset so we processed final thread
     assert provider.calls == 3
+
+
+def test_classify_threads_budget_guard_writes_cap(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    provider = MockProvider(
+        response={"content": {"theme": "pipeline", "relevance": 0.8, "confidence": 0.8}}
+    )
+    client = RepairingLLMClient(
+        provider=provider,
+        model="mock-model",
+        api_key_env="OPENAI_API_KEY",
+        timeout_s=5.0,
+        max_output_tokens=64,
+        cache_dir=tmp_path / "cache-guard",
+        repair_attempts=0,
+    )
+    guard = CostGuard(cap_usd=0.00001, price_per_1k_tokens=0.002)
+    now = datetime(2024, 2, 1, tzinfo=timezone.utc)
+    threads = [
+        {
+            "thread_id": 1,
+            "messages": [
+                {
+                    "message_id": 10,
+                    "thread_id": 1,
+                    "user_id": 1,
+                    "body": "Investigate revenue latency this week.",
+                    "tokens": 120,
+                    "sent_at": now,
+                }
+            ],
+        }
+    ]
+    predictions = classify_threads(
+        threads,
+        client,
+        source="slack",
+        guard=guard,
+        exec_user_ids=None,
+    )
+    assert predictions == []
+    coverage = {
+        "slack": {
+            "overall": {
+                "actual": 0,
+                "target": len(threads),
+                "coverage_pct": 0.0,
+                "met_floor": False,
+                "behavior": "behavior_c_continue",
+            },
+            "per_bucket": {},
+        }
+    }
+    budget_path = tmp_path / "budget.json"
+    guard.write_budget(
+        budget_path,
+        extra={
+            "messages": {"slack": 0},
+            "coverage": coverage,
+        },
+    )
+    payload = json.loads(budget_path.read_text(encoding="utf-8"))
+    assert payload["stopped_due_to_cap"] is True
+    overall = payload["coverage"]["slack"]["overall"]
+    assert overall["met_floor"] is False
+    assert overall["behavior"] == "behavior_c_continue"

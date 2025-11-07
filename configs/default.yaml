@@ -59,7 +59,16 @@
       "min": 0.15,
       "max": 0.6
     },
-    "revenue_norm": "median_3m"
+    "revenue_norm": "median_3m",
+    "marketplace": {
+      "evening_window": {
+        "start_hour": 17,
+        "end_hour": 21,
+        "min_share_pct": 20.0,
+        "min_days_pct": 80.0
+      },
+      "category_caps": {}
+    }
   },
   "budget": {
     "mode": "sample_to_fit",
