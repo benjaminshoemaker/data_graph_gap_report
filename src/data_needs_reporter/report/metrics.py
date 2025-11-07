@@ -954,6 +954,8 @@ def validate_marketplace_evening_coverage(
 def validate_marketplace_category_caps(
     warehouse_path: Path,
     category_caps: Optional[Mapping[str, float]] = None,
+    *,
+    rollup_to_parent: bool = False,
 ) -> Dict[str, object]:
     polars = _require_polars()
     path = Path(warehouse_path)
@@ -1060,19 +1062,35 @@ def validate_marketplace_category_caps(
             current = parent
 
     category_ids = list(parent_map.keys())
+
+    def resolve_group(category_id: int) -> Optional[int]:
+        if rollup_to_parent:
+            return resolve_top(category_id)
+        return category_id
+
     mapping_rows = []
     for cat_id in category_ids:
-        top_id = resolve_top(cat_id)
-        if top_id is not None:
-            mapping_rows.append({"category_id": cat_id, "top_category_id": top_id})
-    mapping_df = polars.DataFrame(mapping_rows)
+        group_id = resolve_group(cat_id)
+        if group_id is not None:
+            mapping_rows.append(
+                {"category_id": cat_id, "group_category_id": int(group_id)}
+            )
+    mapping_df = polars.DataFrame(mapping_rows) if mapping_rows else None
 
     listings_enriched = listings.select(
         [
             polars.col("listing_id").cast(polars.Int64),
             polars.col("category_id").cast(polars.Int64),
         ]
-    ).join(mapping_df, on="category_id", how="left")
+    )
+    if mapping_df is not None:
+        listings_enriched = listings_enriched.join(
+            mapping_df, on="category_id", how="left"
+        )
+    else:
+        listings_enriched = listings_enriched.with_columns(
+            polars.col("category_id").alias("group_category_id")
+        )
 
     order_items_enriched = order_items.select(
         [
@@ -1083,8 +1101,8 @@ def validate_marketplace_category_caps(
         ]
     ).join(listings_enriched, on="listing_id", how="left")
 
-    missing_top_categories = (
-        order_items_enriched.filter(polars.col("top_category_id").is_null())
+    missing_group_categories = (
+        order_items_enriched.filter(polars.col("group_category_id").is_null())
         .select("listing_id")
         .to_series()
         .drop_nulls()
@@ -1092,7 +1110,7 @@ def validate_marketplace_category_caps(
     )
 
     order_items_enriched = order_items_enriched.filter(
-        polars.col("top_category_id").is_not_null()
+        polars.col("group_category_id").is_not_null()
     )
 
     order_items_enriched = order_items_enriched.with_columns(
@@ -1100,18 +1118,18 @@ def validate_marketplace_category_caps(
     )
 
     gmv_by_category = (
-        order_items_enriched.group_by("top_category_id")
+        order_items_enriched.group_by("group_category_id")
         .agg(polars.col("gmv_cents").sum().alias("gmv_cents"))
-        .sort("top_category_id")
+        .sort("group_category_id")
     )
 
     if gmv_by_category.height == 0:
         detail = "Order item GMV unavailable for category caps validation."
         issues = []
-        if missing_top_categories:
+        if missing_group_categories:
             issues.append(
                 "Unmapped listing categories: "
-                + ", ".join(str(int(val)) for val in missing_top_categories)
+                + ", ".join(str(int(val)) for val in missing_group_categories)
             )
         issues.append(detail)
         return {"passed": False, "issues": issues, "detail": detail}
@@ -1121,45 +1139,50 @@ def validate_marketplace_category_caps(
         detail = "Total GMV is zero; cannot validate category caps."
         return {"passed": False, "issues": [detail], "detail": detail}
 
-    top_name_df = polars.DataFrame(
+    if rollup_to_parent:
+        group_name_pairs = [
+            (cat_id, name_map.get(cat_id, f"category_{cat_id}"))
+            for cat_id, parent in parent_map.items()
+            if parent is None
+        ]
+    else:
+        group_name_pairs = [
+            (cat_id, name_map.get(cat_id, f"category_{cat_id}"))
+            for cat_id in category_ids
+        ]
+    name_df = polars.DataFrame(
         {
-            "top_category_id": [
-                cat_id for cat_id, parent in parent_map.items() if parent is None
-            ],
-            "top_category_name": [
-                name_map.get(cat_id, f"category_{cat_id}")
-                for cat_id, parent in parent_map.items()
-                if parent is None
-            ],
+            "group_category_id": [pair[0] for pair in group_name_pairs],
+            "group_category_name": [pair[1] for pair in group_name_pairs],
         }
     )
 
     gmv_by_category = gmv_by_category.join(
-        top_name_df, on="top_category_id", how="left"
+        name_df, on="group_category_id", how="left"
     ).with_columns((polars.col("gmv_cents") / polars.lit(total_gmv)).alias("share"))
 
     share_map: Dict[int, float] = {
         int(cat_id): float(share)
         for cat_id, share in zip(
-            gmv_by_category["top_category_id"].to_list(),
+            gmv_by_category["group_category_id"].to_list(),
             gmv_by_category["share"].to_list(),
         )
     }
-    top_name_map = {
+    group_name_map = {
         int(cat_id): (
             name if name is not None else name_map.get(int(cat_id), str(cat_id))
         )
         for cat_id, name in zip(
-            gmv_by_category["top_category_id"].to_list(),
-            gmv_by_category["top_category_name"].to_list(),
+            gmv_by_category["group_category_id"].to_list(),
+            gmv_by_category["group_category_name"].to_list(),
         )
     }
 
     issues: List[str] = []
-    if missing_top_categories:
+    if missing_group_categories:
         issues.append(
             "Unmapped listing categories: "
-            + ", ".join(str(int(val)) for val in missing_top_categories)
+            + ", ".join(str(int(val)) for val in missing_group_categories)
         )
 
     normalized_caps: Dict[int, float] = {}
@@ -1173,7 +1196,7 @@ def validate_marketplace_category_caps(
             limit = limit / 100.0
         matched_id: Optional[int] = None
         lowered_key = str(key).lower()
-        for cat_id, name in top_name_map.items():
+        for cat_id, name in group_name_map.items():
             if str(cat_id) == str(key):
                 matched_id = cat_id
                 break
@@ -1188,7 +1211,7 @@ def validate_marketplace_category_caps(
     for cat_id, limit in normalized_caps.items():
         share = share_map.get(cat_id, 0.0)
         if share > limit + 1e-9:
-            name = top_name_map.get(cat_id, str(cat_id))
+            name = group_name_map.get(cat_id, str(cat_id))
             issues.append(
                 f"Category {name} share {share * 100:.1f}% exceeds cap {limit * 100:.1f}%."
             )
@@ -1197,7 +1220,7 @@ def validate_marketplace_category_caps(
     if passed:
         detail_parts = []
         for cat_id, limit in normalized_caps.items():
-            name = top_name_map.get(cat_id, str(cat_id))
+            name = group_name_map.get(cat_id, str(cat_id))
             share_pct = share_map.get(cat_id, 0.0) * 100.0
             detail_parts.append(f"{name}={share_pct:.1f}% (cap {limit * 100:.1f}%)")
         detail = (
@@ -1211,7 +1234,10 @@ def validate_marketplace_category_caps(
     return {"passed": passed, "issues": issues, "detail": detail}
 
 
-def validate_monetization_targets(warehouse_path: Path) -> Dict[str, object]:
+def validate_monetization_targets(
+    warehouse_path: Path,
+    attach_targets: Optional[Mapping[str, float]] = None,
+) -> Dict[str, object]:
     polars = _require_polars()
     path = Path(warehouse_path)
     if not path.exists():
@@ -1309,6 +1335,11 @@ def validate_monetization_targets(warehouse_path: Path) -> Dict[str, object]:
             if "customer_id" not in invoices.columns:
                 issues.append("fact_subscription_invoice missing 'customer_id'.")
 
+        tier_targets = {
+            str(k): float(v)
+            for k, v in (attach_targets.items() if attach_targets else [])
+        }
+
         if not issues and customers.height and "customer_id" in customers.columns:
             total_customers = int(
                 customers.select(
@@ -1333,6 +1364,89 @@ def validate_monetization_targets(warehouse_path: Path) -> Dict[str, object]:
                     )
                 else:
                     detail_parts.append(f"attach_rate={attach_rate:.4f}")
+
+                if tier_targets:
+                    tier_field = None
+                    invoices_with_tier = invoices
+                    if "tier" in invoices.columns:
+                        tier_field = "_tier"
+                        invoices_with_tier = invoices.with_columns(
+                            polars.col("tier")
+                                .cast(polars.Utf8)
+                                .str.strip_chars()
+                                .alias("_tier")
+                        )
+                    elif "plan_id" in invoices.columns:
+                        plan_path = path / "dim_plan.parquet"
+                        if plan_path.exists():
+                            try:
+                                plans = _scan_parquet(plan_path).collect(
+                                    streaming=True
+                                )
+                                if "tier" in plans.columns:
+                                    plan_map = plans.select(
+                                        [
+                                            polars.col("plan_id")
+                                            .cast(polars.Int64)
+                                            .alias("plan_id"),
+                                            polars.col("tier")
+                                            .cast(polars.Utf8)
+                                            .alias("_tier"),
+                                        ]
+                                    )
+                                    invoices_with_tier = invoices.join(
+                                        plan_map, on="plan_id", how="left"
+                                    )
+                                    tier_field = "_tier"
+                            except Exception as exc:  # pragma: no cover
+                                issues.append(
+                                    f"Unable to read dim_plan for tier mapping: {exc}"
+                                )
+                    if tier_field is None:
+                        issues.append(
+                            "Attach targets configured but no tier column available."
+                        )
+                    else:
+                        tier_records = (
+                            invoices_with_tier.select(
+                                polars.col("customer_id")
+                                .cast(polars.Int64)
+                                .alias("customer_id"),
+                                polars.col(tier_field)
+                                .cast(polars.Utf8)
+                                .alias("_tier"),
+                            )
+                            .drop_nulls(subset=["customer_id", "_tier"])
+                            .to_dicts()
+                        )
+                        tier_customer_map: Dict[str, set[int]] = {}
+                        for row in tier_records:
+                            tier_name = str(row["_tier"]).strip()
+                            if not tier_name:
+                                continue
+                            tier_customer_map.setdefault(tier_name, set()).add(
+                                int(row["customer_id"])
+                            )
+
+                        for tier_name, threshold_raw in tier_targets.items():
+                            threshold = float(threshold_raw)
+                            if threshold > 1.0:
+                                threshold = threshold / 100.0
+                            customers_in_tier = tier_customer_map.get(tier_name, set())
+                            tier_attach = (
+                                len(customers_in_tier) / total_customers
+                                if total_customers
+                                else 0.0
+                            )
+                            if tier_attach + 1e-9 < threshold:
+                                issues.append(
+                                    f"Tier {tier_name} attach rate {tier_attach:.4f} "
+                                    f"below target {threshold:.4f}."
+                                )
+                            else:
+                                detail_parts.append(
+                                    f"{tier_name}_attach={tier_attach:.4f}"
+                                )
 
         passed = not issues
         detail = "Monetization targets satisfied." if passed else "; ".join(issues)
@@ -2766,6 +2880,7 @@ def compute_data_health(warehouse_dir: Path, tz: str) -> Dict[str, object]:
     polars = _require_polars()
     warehouse_path = Path(warehouse_dir)
     tables: Dict[str, Dict[str, object]] = {}
+    aggregates_by_table: Dict[str, Dict[str, float]] = {}
 
     agg_rows = 0
     agg_key_null_rows = 0.0
@@ -3077,6 +3192,19 @@ def compute_data_health(warehouse_dir: Path, tz: str) -> Dict[str, object]:
 
         tables[spec.table] = table_metrics
 
+        if spec.table == "fact_subscription_invoice":
+            aggregates_by_table[spec.table] = {
+                "key_null_pct": float(table_metrics.get("key_null_pct", 0.0) or 0.0),
+                "dup_key_pct": float(table_metrics.get("dup_key_pct", 0.0) or 0.0),
+                "fk_success_pct": float(
+                    table_metrics.get("fk_success_pct", 100.0) or 0.0
+                ),
+                "orphan_pct": float(table_metrics.get("orphan_pct", 0.0) or 0.0),
+                "p95_ingest_lag_min": float(
+                    table_metrics.get("p95_ingest_lag_min", 0.0) or 0.0
+                ),
+            }
+
     aggregates: Dict[str, float] = {
         "key_null_pct": _pct(agg_key_null_rows, agg_rows),
         "dup_key_pct": _pct(agg_dup_rows, agg_rows),
@@ -3095,7 +3223,11 @@ def compute_data_health(warehouse_dir: Path, tz: str) -> Dict[str, object]:
     else:
         aggregates["p95_ingest_lag_min"] = 0.0
 
-    return {"tables": tables, "aggregates": aggregates}
+    return {
+        "tables": tables,
+        "aggregates": aggregates,
+        "aggregates_by_table": aggregates_by_table,
+    }
 
 
 __all__ = [

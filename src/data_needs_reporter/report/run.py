@@ -230,6 +230,9 @@ def write_data_health_report(
             "dup_key_pct": 0.0,
             "p95_ingest_lag_min": 0.0,
         }
+    aggregates_by_table = payload.get("aggregates_by_table")
+    if not isinstance(aggregates_by_table, dict):
+        payload["aggregates_by_table"] = {}
     out_path.mkdir(parents=True, exist_ok=True)
     (out_path / "data_health.json").write_text(
         json.dumps(payload, indent=2), encoding="utf-8"

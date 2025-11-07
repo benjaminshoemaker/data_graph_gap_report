@@ -57,6 +57,42 @@ def _collect_manifest_files(out_path: Path) -> Dict[str, Path]:
     return manifest_files
 
 
+def write_schema_manifest(archetype: str, out_dir: Path) -> None:
+    archetype_key = archetype.lower()
+    schemas = WAREHOUSE_SCHEMAS.get(archetype_key)
+    if not schemas:
+        raise ValueError(f"Unsupported archetype: {archetype}")
+
+    out_path = Path(out_dir)
+    schema_spec = WAREHOUSE_SCHEMA_SPEC.get(archetype_key, {})
+    volume_targets = WAREHOUSE_VOLUME_TARGETS.get(archetype_key, {})
+
+    tables_manifest: Dict[str, object] = {}
+    manifest: Dict[str, object] = {"tables": tables_manifest}
+
+    for table_name, schema in schemas.items():
+        column_spec = schema_spec.get(table_name, {})
+        if isinstance(column_spec, dict):
+            columns_entry = {
+                column_name: {"type": column_type}
+                for column_name, column_type in column_spec.items()
+            }
+        else:
+            columns_entry = {
+                column_name: {"type": str(dtype).lower()}
+                for column_name, dtype in schema
+            }
+
+        entry: Dict[str, object] = {"columns": columns_entry}
+        if table_name in volume_targets:
+            entry["rows"] = volume_targets[table_name]
+        tables_manifest[table_name] = entry
+
+    (out_path / "schema.json").write_text(
+        json.dumps(manifest, indent=2), encoding="utf-8"
+    )
+
+
 def write_warehouse_hash_manifest(out_dir: Path, seed: int | None) -> None:
     out_path = Path(out_dir)
     files = _collect_manifest_files(out_path)
@@ -205,36 +241,11 @@ def write_empty_warehouse(
     out_path.mkdir(parents=True, exist_ok=True)
 
     schemas = WAREHOUSE_SCHEMAS[archetype_key]
-    tables_manifest: Dict[str, object] = {}
-    manifest: Dict[str, object] = {"tables": tables_manifest}
-    schema_spec = WAREHOUSE_SCHEMA_SPEC.get(archetype_key, {})
-    volume_targets = WAREHOUSE_VOLUME_TARGETS.get(archetype_key, {})
-
     for table_name, schema in schemas.items():
         df = _empty_dataframe(schema)
         write_parquet_atomic(out_path / f"{table_name}.parquet", df)
 
-        column_spec = schema_spec.get(table_name, {})
-        if isinstance(column_spec, dict):
-            columns_entry = {
-                column_name: {"type": column_type}
-                for column_name, column_type in column_spec.items()
-            }
-        else:
-            columns_entry = {
-                column_name: {"type": str(dtype).lower()}
-                for column_name, dtype in schema
-            }
-
-        entry: Dict[str, object] = {"columns": columns_entry}
-        if table_name in volume_targets:
-            entry["rows"] = volume_targets[table_name]
-        tables_manifest[table_name] = entry
-
-    (out_path / "schema.json").write_text(
-        json.dumps(manifest, indent=2),
-        encoding="utf-8",
-    )
+    write_schema_manifest(archetype, out_path)
     (out_path / ".dry_run").write_text("dry-run\n", encoding="utf-8")
     write_warehouse_hash_manifest(out_path, seed)
 
@@ -927,6 +938,7 @@ __all__ = [
     "WAREHOUSE_SCHEMAS",
     "NEOBANK_MERCHANT_SECTORS",
     "NEOBANK_MCC_TO_SECTOR",
+    "write_schema_manifest",
     "write_empty_warehouse",
     "write_warehouse_hash_manifest",
     "generate_neobank_dims",

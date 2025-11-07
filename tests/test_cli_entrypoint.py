@@ -23,12 +23,15 @@ def _host_site_packages() -> list[str]:
 
 
 def _install_editable(python_bin: Path, env: dict[str, str]) -> None:
+    env = dict(env)
+    env.setdefault("PIP_NO_BUILD_ISOLATION", "1")
     subprocess.run(
         [
             str(python_bin),
             "-m",
             "pip",
             "install",
+            "--no-build-isolation",
             "--no-deps",
             "-e",
             str(PROJECT_ROOT),

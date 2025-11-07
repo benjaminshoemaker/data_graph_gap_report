@@ -36,6 +36,103 @@ Use `--no-llm` to skip LLM calls and `--fast` to run with evaluation-scale volum
 
 Artifacts land under `reports/` with an index at `reports/index.md` linking to each archetype.
 
+## Usage
+
+Global options apply to every command:
+
+```
+Usage: dnr [OPTIONS] COMMAND [ARGS]...
+
+Options:
+  --version, -V            Show the application version and exit.
+  --config PATH            Path to an alternate YAML configuration file.
+  --api-cap-usd FLOAT      Override the LLM API spend cap in USD.
+  --window INTEGER         Override report window size in days.
+  --no-llm                 Disable LLM-powered classification for this run.
+  --help                   Show this message and exit.
+```
+
+### `dnr init`
+
+Scaffold the default directories and config file:
+
+```
+Usage: dnr init
+```
+
+### `dnr gen-warehouse`
+
+```
+Usage: dnr gen-warehouse [OPTIONS]
+
+Options:
+  --archetype TEXT  Warehouse archetype to generate (neobank or marketplace).  [required]
+  --out PATH        Output directory for generated warehouse files.            [required]
+  --dry-run         Write empty schema tables only.
+  --help            Show this message and exit.
+```
+
+### `dnr gen-comms`
+
+```
+Usage: dnr gen-comms [OPTIONS]
+
+Options:
+  --archetype TEXT  Archetype to generate communications for (neobank or marketplace).  [required]
+  --out PATH        Output directory for generated communications.                      [required]
+  --help            Show this message and exit.
+```
+
+### `dnr run-report`
+
+```
+Usage: dnr run-report [OPTIONS]
+
+Options:
+  --warehouse PATH  Path to warehouse data.      [required]
+  --comms PATH      Path to communications data. [required]
+  --out PATH        Output directory for reports. [required]
+  --strict          Exit with non-zero status if coverage or budget issues are detected.
+  --help            Show this message and exit.
+```
+
+### `dnr validate`
+
+```
+Usage: dnr validate [OPTIONS]
+
+Options:
+  --warehouse PATH  [required]
+  --comms PATH      [required]
+  --out PATH        [required]
+  --strict          Fail the process when any gate fails.
+  --help            Show this message and exit.
+```
+
+### `dnr eval-labels`
+
+```
+Usage: dnr eval-labels [OPTIONS]
+
+Options:
+  --pred PATH    Directory with prediction parquet files.     [required]
+  --labels PATH  Directory containing oracle label parquet files. [required]
+  --out PATH     Evaluation report output directory.          [required]
+  --strict       Exit with non-zero code when any evaluation gate fails.
+  --help         Show this message and exit.
+```
+
+### `dnr quickstart`
+
+```
+Usage: dnr quickstart [OPTIONS]
+
+Options:
+  --fast     Run with reduced volumes.
+  --no-llm   Skip all LLM calls.
+  --help     Show this message and exit.
+```
+
 ## Performance Targets
 
 Local smoke budgets (Apple M2, Poetry install, `polars` available) use the quickstart-scale config that `scripts/bench.py` writes before running each command with `--no-llm`:
@@ -124,19 +221,6 @@ Quality checks and label review tooling live in `dnr validate` and `dnr eval-lab
   - Emits precision/recall summary at `reports/eval/latest/summary.json` and per-source breakdowns in CSV/JSON.
 
 Use these commands after generation to gate releases or inspect model drift; re-run with the same seeds/config to compare outputs across commits.
-
-## Core Commands
-
-```bash
-poetry run dnr init                       # scaffold directories and default config
-poetry run dnr gen-warehouse --archetype neobank --dry-run
-poetry run dnr gen-comms --archetype neobank
-poetry run dnr run-report --warehouse data/neobank --comms comms/neobank --out reports/neobank
-poetry run dnr validate --warehouse data/neobank --comms comms/neobank --out reports/neobank/qc --strict
-poetry run dnr eval-labels --pred runs/latest/preds --labels meta --out reports/eval/latest
-```
-
-Global options are supplied before the subcommand, for example `dnr --config myconfig.yaml run-report ...`.
 
 ## Configuration Precedence
 

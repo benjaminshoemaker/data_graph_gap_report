@@ -83,7 +83,7 @@ def _write_marketplace_orders_for_coverage(
 
 
 def _write_marketplace_category_fixture(
-    base_path: Path, gmv_by_listing: dict[int, int]
+    base_path: Path, gmv_by_listing: dict[int, int], *, use_child_categories: bool = False
 ) -> None:
     base_path.mkdir(parents=True, exist_ok=True)
     tz = timezone.utc
@@ -103,11 +103,12 @@ def _write_marketplace_category_fixture(
     )
     categories.write_parquet(base_path / "dim_category.parquet")
 
+    listing_categories = [101, 102, 103] if use_child_categories else [1, 2, 3]
     listings = pl.DataFrame(
         {
             "listing_id": [1, 2, 3],
             "seller_id": [1001, 1002, 1003],
-            "category_id": [101, 102, 103],
+            "category_id": listing_categories,
             "created_at": [
                 datetime(2024, 1, 1, tzinfo=tz),
                 datetime(2024, 1, 1, tzinfo=tz),
@@ -186,3 +187,24 @@ def test_category_caps_fail(tmp_path: Path) -> None:
     result = validate_marketplace_category_caps(warehouse, category_caps={"Home": 0.4})
     assert result["passed"] is False
     assert "exceeds cap" in result["detail"]
+
+
+def test_category_caps_rollup_toggle(tmp_path: Path) -> None:
+    warehouse = tmp_path / "caps_rollup"
+    _write_marketplace_category_fixture(
+        warehouse,
+        {1: 90_000, 2: 5_000, 3: 5_000},
+        use_child_categories=True,
+    )
+    no_rollup = validate_marketplace_category_caps(
+        warehouse,
+        category_caps={"Home Decor": 0.5},
+        rollup_to_parent=False,
+    )
+    assert no_rollup["passed"] is False
+    rollup = validate_marketplace_category_caps(
+        warehouse,
+        category_caps={"Home": 0.9},
+        rollup_to_parent=True,
+    )
+    assert rollup["passed"] is True
