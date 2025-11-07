@@ -168,33 +168,33 @@ jobs:
         if: always()
         run: |
           python - <<'PY'
-import json
-import os
-from pathlib import Path
+          import json
+          import os
+          from pathlib import Path
 
-summary_path = Path("bench.json")
-if not summary_path.exists():
-    print("bench.json not found; skipping summary")
-    raise SystemExit(0)
+          summary_path = Path("bench.json")
+          if not summary_path.exists():
+              print("bench.json not found; skipping summary")
+              raise SystemExit(0)
 
-payload = json.loads(summary_path.read_text(encoding="utf-8"))
-lines = [
-    "## Benchmark Budget Check",
-    "",
-    "| Command | Seconds | Target | Peak RSS (MB) | Status |",
-    "| --- | --- | --- | --- | --- |",
-]
-for cmd in payload.get("commands", []):
-    rss = cmd.get("peak_rss_mb")
-    rss_display = f"{rss:.1f}" if isinstance(rss, (int, float)) else "n/a"
-    status = "ok" if cmd.get("within_budget") else ("slow" if cmd.get("exit_code") == 0 else "fail")
-    lines.append(
-        f"| {cmd.get('name')} | {cmd.get('elapsed_s', 0.0):.2f} | "
-        f"{cmd.get('target_s', 0.0):.2f} | {rss_display} | {status} |"
-    )
-lines.append("")
-lines.append(f"All commands within budget: {payload.get('all_within_budget')}")
+          payload = json.loads(summary_path.read_text(encoding="utf-8"))
+          lines = [
+              "## Benchmark Budget Check",
+              "",
+              "| Command | Seconds | Target | Peak RSS (MB) | Status |",
+              "| --- | --- | --- | --- | --- |",
+          ]
+          for cmd in payload.get("commands", []):
+              rss = cmd.get("peak_rss_mb")
+              rss_display = f"{rss:.1f}" if isinstance(rss, (int, float)) else "n/a"
+              status = "ok" if cmd.get("within_budget") else ("slow" if cmd.get("exit_code") == 0 else "fail")
+              lines.append(
+                  f"| {cmd.get('name')} | {cmd.get('elapsed_s', 0.0):.2f} | "
+                  f"{cmd.get('target_s', 0.0):.2f} | {rss_display} | {status} |"
+              )
+          lines.append("")
+          lines.append(f"All commands within budget: {payload.get('all_within_budget')}")
 
-with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
-    fh.write("\n".join(lines) + "\n")
-PY
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+              fh.write("\n".join(lines) + "\n")
+          PY
