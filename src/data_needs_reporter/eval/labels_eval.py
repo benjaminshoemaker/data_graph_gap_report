@@ -42,7 +42,7 @@ __all__ = [
 def _load_parquet(path: Path) -> pl.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Missing parquet file: {path}")
-    df = pl.read_parquet(path)
+    df = pl.scan_parquet(str(path)).collect(streaming=True)
     if df.height == 0:
         raise ValueError(f"Parquet file {path} is empty")
     return df
@@ -52,13 +52,13 @@ def load_predictions(pred_dir: Path) -> pl.DataFrame:
     """Load prediction parquet files and normalize the source column."""
 
     pred_dir = Path(pred_dir)
+    lazy_frames: list[pl.LazyFrame] = []
     if pred_dir.is_file():
-        frames = [pl.read_parquet(pred_dir)]
+        lazy_frames.append(pl.scan_parquet(str(pred_dir)))
     else:
         direct = pred_dir / "predictions.parquet"
-        frames: list[pl.DataFrame] = []
         if direct.exists():
-            frames.append(pl.read_parquet(direct))
+            lazy_frames.append(pl.scan_parquet(str(direct)))
         else:
             parquet_files = sorted(pred_dir.glob("*.parquet"))
             if not parquet_files:
@@ -66,26 +66,33 @@ def load_predictions(pred_dir: Path) -> pl.DataFrame:
                     f"No prediction parquet files found under {pred_dir}"
                 )
             for file_path in parquet_files:
-                df = pl.read_parquet(file_path)
-                if "source" not in df.columns:
-                    inferred = None
-                    lower_name = file_path.name.lower()
-                    for source_name in THEME_SOURCES:
-                        if source_name in lower_name:
-                            inferred = source_name
-                            break
+                frame = pl.scan_parquet(str(file_path))
+                if "source" not in frame.columns:
+                    inferred = _infer_source_from_name(file_path.name)
                     if inferred is None:
                         raise ValueError(
                             f"Unable to infer source for {file_path}; add a 'source' column."
                         )
-                    df = df.with_columns(pl.lit(inferred).alias("source"))
-                frames.append(df)
-        if not frames:
-            raise ValueError(f"No prediction frames read from {pred_dir}")
-    predictions = pl.concat(frames, how="vertical_relaxed")
+                    frame = frame.with_columns(pl.lit(inferred).alias("source"))
+                lazy_frames.append(frame)
+
+    if not lazy_frames:
+        raise ValueError(f"No prediction frames read from {pred_dir}")
+
+    predictions = pl.concat(lazy_frames, how="vertical_relaxed").collect(
+        streaming=True
+    )
     if "source" not in predictions.columns:
         raise ValueError("Predictions must include a 'source' column")
     return predictions.with_columns(pl.col("source").str.to_lowercase())
+
+
+def _infer_source_from_name(file_name: str) -> str | None:
+    lower_name = file_name.lower()
+    for source_name in THEME_SOURCES:
+        if source_name in lower_name:
+            return source_name
+    return None
 
 
 def _prepare_joined(

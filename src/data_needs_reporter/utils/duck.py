@@ -10,6 +10,13 @@ import polars as pl
 _IDENTIFIER_CLEAN_RE = re.compile(r"[^A-Za-z0-9_]")
 
 
+def _collect_parquet(path: Path, columns: list[str] | None = None) -> pl.DataFrame:
+    lazy_frame = pl.scan_parquet(str(path))
+    if columns:
+        lazy_frame = lazy_frame.select([pl.col(col) for col in columns])
+    return lazy_frame.collect(streaming=True)
+
+
 def open_db(db_path_or_none: Optional[Path]) -> duckdb.DuckDBPyConnection:
     if db_path_or_none is None:
         return duckdb.connect(database=":memory:")
@@ -133,9 +140,9 @@ def run_warehouse_sanity(archetype: str, parquet_dir: Path) -> Dict[str, pl.Data
     arch_key = archetype.lower()
     base_path = Path(parquet_dir)
     if arch_key == "neobank":
-        customers = pl.read_parquet(base_path / "dim_customer.parquet")
-        cards = pl.read_parquet(base_path / "dim_card.parquet")
-        transactions = pl.read_parquet(base_path / "fact_card_transaction.parquet")
+        customers = _collect_parquet(base_path / "dim_customer.parquet")
+        cards = _collect_parquet(base_path / "dim_card.parquet", columns=["card_id"])
+        transactions = _collect_parquet(base_path / "fact_card_transaction.parquet")
 
         customer_counts = pl.DataFrame({"customers": [customers.height]})
         txn_count = transactions.height
@@ -206,9 +213,9 @@ def run_warehouse_sanity(archetype: str, parquet_dir: Path) -> Dict[str, pl.Data
         }
 
     if arch_key == "marketplace":
-        orders = pl.read_parquet(base_path / "fact_order.parquet")
-        payments = pl.read_parquet(base_path / "fact_payment.parquet")
-        order_items = pl.read_parquet(base_path / "fact_order_item.parquet")
+        orders = _collect_parquet(base_path / "fact_order.parquet")
+        payments = _collect_parquet(base_path / "fact_payment.parquet")
+        order_items = _collect_parquet(base_path / "fact_order_item.parquet")
 
         order_counts = pl.DataFrame({"orders": [orders.height]})
 

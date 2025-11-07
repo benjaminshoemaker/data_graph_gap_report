@@ -240,7 +240,7 @@ def _read_parquet_frame(path: Path) -> Optional["pl.DataFrame"]:
         return None
     polars = _require_polars()
     try:
-        return polars.read_parquet(path)
+        return polars.scan_parquet(str(path)).collect(streaming=True)
     except FileNotFoundError:
         return None
 
@@ -523,7 +523,10 @@ def _load_rows(path: Path, columns: Sequence[str]) -> List[Mapping[str, Any]]:
     if not path.exists():
         return []
     polars = _require_polars()
-    df = polars.read_parquet(path, columns=list(columns))
+    lazy_frame = polars.scan_parquet(str(path))
+    if columns:
+        lazy_frame = lazy_frame.select([polars.col(col) for col in columns])
+    df = lazy_frame.collect(streaming=True)
     return df.to_dicts()
 
 

@@ -1,85 +1,34 @@
+from __future__ import annotations
+
+import json
 import os
-import time
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
 
-from data_needs_reporter.cli import app
 
-if os.getenv("CI"):  # pragma: no cover - exercised in CI
-    pytest.skip("Performance timings are skipped in CI.", allow_module_level=True)
-
-pytest.importorskip("polars")
-
-runner = CliRunner()
-
-COMMAND_BUDGETS: tuple[tuple[str, list[str], float], ...] = (
-    (
-        "gen-warehouse",
-        [
-            "gen-warehouse",
-            "--archetype",
-            "neobank",
-            "--out",
-            "data/neobank",
-            "--dry-run",
-        ],
-        3.0,
-    ),
-    (
-        "gen-comms",
-        ["gen-comms", "--archetype", "neobank", "--out", "comms/neobank"],
-        3.5,
-    ),
-    (
-        "run-report",
-        [
-            "run-report",
-            "--warehouse",
-            "data/neobank",
-            "--comms",
-            "comms/neobank",
-            "--out",
-            "reports/neobank",
-        ],
-        3.2,
-    ),
-    (
-        "validate",
-        [
-            "validate",
-            "--warehouse",
-            "data/neobank",
-            "--comms",
-            "comms/neobank",
-            "--out",
-            "reports/neobank/qc",
-            "--strict",
-        ],
-        2.0,
-    ),
+@pytest.mark.performance
+@pytest.mark.skipif(
+    os.environ.get("CI"),
+    reason="Performance budgets are informational in CI.",
 )
+def test_perf_benchmarks_respect_budgets(tmp_path: Path) -> None:
+    """Run the bench script locally and ensure all commands meet their targets."""
 
+    cmd = [
+        sys.executable,
+        "scripts/bench.py",
+        "--workspace",
+        str(tmp_path),
+        "--report-format",
+        "json",
+        "--fail-on-budget",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    detail = f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    assert result.returncode == 0, f"bench.py failed\n{detail}"
 
-def test_cli_performance_budgets() -> None:
-    timings: list[tuple[str, float, float]] = []
-    with runner.isolated_filesystem():
-        for name, args, budget in COMMAND_BUDGETS:
-            start = time.perf_counter()
-            result = runner.invoke(app, args)
-            stdout = getattr(result, "stdout", result.output)
-            try:
-                stderr = result.stderr  # type: ignore[attr-defined]
-            except (AttributeError, ValueError):
-                stderr = ""
-            assert (
-                result.exit_code == 0
-            ), f"{name} failed with output:\n{stdout}\n{stderr}"
-            elapsed = time.perf_counter() - start
-            timings.append((name, elapsed, budget))
-            assert (
-                elapsed <= budget
-            ), f"{name} exceeded budget: {elapsed:.2f}s > {budget:.2f}s"
-
-    for name, elapsed, budget in timings:
-        print(f"{name}: {elapsed:.2f}s (budget ≤ {budget:.2f}s)")
+    payload = json.loads(result.stdout)
+    assert payload.get("all_within_budget"), f"Benchmarks exceeded budgets\n{detail}"

@@ -38,12 +38,22 @@ Artifacts land under `reports/` with an index at `reports/index.md` linking to e
 
 ## Performance Targets
 
-Local smoke budgets (Apple M2, Poetry install, `polars` available):
+Local smoke budgets (Apple M2, Poetry install, `polars` available) use the quickstart-scale config that `scripts/bench.py` writes before running each command with `--no-llm`:
 
-- `dnr gen-warehouse --archetype neobank --out data/neobank --dry-run` ≤ 3.0s
-- `dnr gen-comms --archetype neobank --out comms/neobank` ≤ 3.5s
-- `dnr run-report --warehouse data/neobank --comms comms/neobank --out reports/neobank` ≤ 2.5s
-- `dnr validate --warehouse data/neobank --comms comms/neobank --out reports/neobank/qc --strict` ≤ 2.0s
+| Command | Target (s) |
+| --- | --- |
+| `dnr gen-warehouse --archetype neobank --out <tmp>/warehouse` | ≤ 3.0 |
+| `dnr gen-comms --archetype neobank --out <tmp>/comms` | ≤ 3.5 |
+| `dnr run-report --warehouse <tmp>/warehouse --comms <tmp>/comms --out <tmp>/reports` | ≤ 2.5 |
+| `dnr validate --warehouse <tmp>/warehouse --comms <tmp>/comms --out <tmp>/reports/qc --strict` | ≤ 2.0 |
+
+Run the smoke bench anytime with:
+
+```bash
+poetry run python scripts/bench.py --report-format table
+```
+
+The script prints elapsed seconds and peak RSS for each command, writes JSON when `--report-format json` is passed, and the CI job publishes the latest numbers in the workflow summary. Use it locally with `--fail-on-budget` to gate pushes before opening a PR.
 
 ## Reproducibility & Seeds
 

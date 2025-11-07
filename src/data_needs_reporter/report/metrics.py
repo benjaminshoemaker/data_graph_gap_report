@@ -25,6 +25,15 @@ def _require_polars() -> pl.DataFrame:
     return pl
 
 
+def _scan_parquet(path: Path, columns: Sequence[str] | None = None) -> "pl.LazyFrame":
+    polars = _require_polars()
+    lazy_frame = polars.scan_parquet(str(path))
+    if columns:
+        selected = [polars.col(col) for col in columns]
+        lazy_frame = lazy_frame.select(selected)
+    return lazy_frame
+
+
 def key_null_pct(df: "pl.DataFrame", columns: Sequence[str]) -> float:
     polars = _require_polars()
     if not columns or df.height == 0:
@@ -478,7 +487,7 @@ def validate_seasonality_targets(
         }
 
     try:
-        df = polars.read_parquet(table_path)
+        table_scan = _scan_parquet(table_path)
     except Exception as exc:  # pragma: no cover - unreadable file rare
         detail = f"Unable to read {table_path}: {exc}"
         return {
@@ -487,15 +496,7 @@ def validate_seasonality_targets(
             "detail": detail,
         }
 
-    if df.height == 0:
-        detail = f"Table {table_name} is empty; cannot validate seasonality."
-        return {
-            "passed": False,
-            "issues": [detail],
-            "detail": detail,
-        }
-
-    if timestamp_col not in df.columns:
+    if timestamp_col not in table_scan.columns:
         detail = f"Column '{timestamp_col}' missing from {table_name}."
         return {
             "passed": False,
@@ -503,8 +504,14 @@ def validate_seasonality_targets(
             "detail": detail,
         }
 
-    filtered = df.filter(polars.col(timestamp_col).is_not_null())
-    if filtered.height == 0:
+    filtered = table_scan.filter(polars.col(timestamp_col).is_not_null())
+    row_count = (
+        filtered.select(polars.count().alias("rows"))
+        .collect(streaming=True)
+        .get_column("rows")
+        .item()
+    )
+    if not row_count:
         detail = f"Column '{timestamp_col}' contains only null values."
         return {
             "passed": False,
@@ -512,8 +519,7 @@ def validate_seasonality_targets(
             "detail": detail,
         }
 
-    local_ts_expr = polars.col(timestamp_col)
-    dtype = df.schema.get(timestamp_col)
+    dtype = table_scan.schema.get(timestamp_col)
     if tz and isinstance(dtype, PlDatetime):
         expr = polars.col(timestamp_col)
         if dtype.time_zone is None:
@@ -522,21 +528,25 @@ def validate_seasonality_targets(
             local_ts_expr = expr.dt.convert_time_zone(tz)
         except Exception:
             local_ts_expr = expr
+    else:
+        local_ts_expr = polars.col(timestamp_col)
+
     enriched = filtered.with_columns(
         [
             local_ts_expr.alias("_local_ts"),
         ]
-    )
-    working_ts = polars.col("_local_ts")
-    enriched = enriched.with_columns(
+    ).with_columns(
         [
-            working_ts.dt.weekday().alias("_dow"),
-            working_ts.dt.hour().alias("_hour"),
+            polars.col("_local_ts").dt.weekday().alias("_dow"),
+            polars.col("_local_ts").dt.hour().alias("_hour"),
         ]
     )
 
     dow_counts = (
-        enriched.group_by("_dow").agg(polars.count().alias("rows")).sort("_dow")
+        enriched.group_by("_dow")
+        .agg(polars.count().alias("rows"))
+        .sort("_dow")
+        .collect(streaming=True)
     )
 
     issues: List[str] = []
@@ -572,6 +582,7 @@ def validate_seasonality_targets(
         .agg(polars.count().alias("rows"))
         .rename({"_hour": "hour"})
         .sort("rows", descending=True)
+        .collect(streaming=True)
     )
 
     if hour_counts.height < 2:
@@ -625,7 +636,7 @@ def validate_taxonomy_targets(warehouse_path: Path) -> Dict[str, object]:
                 "detail": detail,
             }
         try:
-            merchants = polars.read_parquet(merchant_path)
+            merchants = _scan_parquet(merchant_path).collect(streaming=True)
         except Exception as exc:  # pragma: no cover - unreadable file rare
             detail = f"Unable to read {merchant_path}: {exc}"
             return {
@@ -662,9 +673,9 @@ def validate_taxonomy_targets(warehouse_path: Path) -> Dict[str, object]:
             detail = f"Missing required marketplace tables: {', '.join(missing)}."
             return {"passed": False, "issues": [detail], "detail": detail}
         try:
-            categories = polars.read_parquet(category_path)
-            listings = polars.read_parquet(listing_path)
-            order_items = polars.read_parquet(order_items_path)
+            categories = _scan_parquet(category_path).collect(streaming=True)
+            listings = _scan_parquet(listing_path).collect(streaming=True)
+            order_items = _scan_parquet(order_items_path).collect(streaming=True)
         except Exception as exc:  # pragma: no cover
             detail = f"Unable to read taxonomy tables: {exc}"
             return {
@@ -829,18 +840,21 @@ def validate_marketplace_evening_coverage(
         if not table_path.exists():
             continue
         try:
-            df = polars.read_parquet(table_path, columns=[column])
+            lazy_frame = _scan_parquet(table_path, columns=[column])
         except Exception as exc:  # pragma: no cover - unreadable file rare
             load_issues.append(f"Unable to read {filename}: {exc}")
             continue
-        if column not in df.columns:
+        if column not in lazy_frame.columns:
             load_issues.append(f"{filename} missing required column '{column}'.")
             continue
-        if df.height == 0:
-            continue
-        frames.append(
-            df.rename({column: "ts"}).filter(polars.col("ts").is_not_null())
+        filtered = (
+            lazy_frame.filter(polars.col(column).is_not_null())
+            .rename({column: "ts"})
+            .collect(streaming=True)
         )
+        if filtered.height == 0:
+            continue
+        frames.append(filtered)
 
     if not frames:
         detail = "No order or payment events available for evening coverage check."
@@ -965,9 +979,9 @@ def validate_marketplace_category_caps(
         return {"passed": False, "issues": [detail], "detail": detail}
 
     try:
-        categories = polars.read_parquet(category_path)
-        listings = polars.read_parquet(listing_path)
-        order_items = polars.read_parquet(order_items_path)
+        categories = _scan_parquet(category_path).collect(streaming=True)
+        listings = _scan_parquet(listing_path).collect(streaming=True)
+        order_items = _scan_parquet(order_items_path).collect(streaming=True)
     except Exception as exc:  # pragma: no cover
         detail = f"Unable to read marketplace taxonomy tables: {exc}"
         return {"passed": False, "issues": [detail], "detail": detail}
@@ -1224,9 +1238,9 @@ def validate_monetization_targets(warehouse_path: Path) -> Dict[str, object]:
             detail = f"Missing required monetization tables: {', '.join(missing)}."
             return {"passed": False, "issues": [detail], "detail": detail}
         try:
-            transactions = polars.read_parquet(txn_path)
-            customers = polars.read_parquet(customer_path)
-            invoices = polars.read_parquet(invoice_path)
+            transactions = _scan_parquet(txn_path).collect(streaming=True)
+            customers = _scan_parquet(customer_path).collect(streaming=True)
+            invoices = _scan_parquet(invoice_path).collect(streaming=True)
         except Exception as exc:  # pragma: no cover - unreadable file rare
             detail = f"Unable to read monetization tables: {exc}"
             return {"passed": False, "issues": [detail], "detail": detail}
@@ -1328,7 +1342,7 @@ def validate_monetization_targets(warehouse_path: Path) -> Dict[str, object]:
             detail = f"Missing payment facts at {payment_path}."
             return {"passed": False, "issues": [detail], "detail": detail}
         try:
-            payments = polars.read_parquet(payment_path)
+            payments = _scan_parquet(payment_path).collect(streaming=True)
         except Exception as exc:  # pragma: no cover
             detail = f"Unable to read {payment_path}: {exc}"
             return {"passed": False, "issues": [detail], "detail": detail}
@@ -1392,11 +1406,11 @@ def validate_trajectory_targets(warehouse_path: Path) -> Dict[str, object]:
         return {"passed": False, "issues": [detail], "detail": detail}
 
     try:
-        customers = polars.read_parquet(customer_path)
-        invoices = polars.read_parquet(invoice_path)
-        transactions = polars.read_parquet(
+        customers = _scan_parquet(customer_path).collect(streaming=True)
+        invoices = _scan_parquet(invoice_path).collect(streaming=True)
+        transactions = _scan_parquet(
             txn_path, columns=["event_time", "amount_cents"]
-        )
+        ).collect(streaming=True)
     except Exception as exc:  # pragma: no cover - unreadable file rare
         detail = f"Unable to read trajectory tables: {exc}"
         return {"passed": False, "issues": [detail], "detail": detail}
@@ -1605,7 +1619,7 @@ def validate_comms_targets(comms_path: Path) -> Dict[str, object]:
             issues.append(f"Missing communications file: {filename}")
             continue
         try:
-            data = polars.read_parquet(file_path)
+            data = _scan_parquet(file_path).collect(streaming=True)
         except Exception as exc:  # pragma: no cover - unreadable file rare
             issues.append(f"Unable to read {filename}: {exc}")
             continue
@@ -2453,7 +2467,9 @@ def _detect_schema_gap_event(polars, table_path: Path) -> Optional[Dict[str, obj
     if not table_path.exists():
         return None
     try:
-        df = polars.read_parquet(table_path, columns=["event_time"])
+        df = _scan_parquet(table_path, columns=["event_time"]).collect(
+            streaming=True
+        )
     except Exception:  # pragma: no cover - unreadable file
         return None
     if df.height < SCHEMA_GAP_MIN_ROWS or "event_time" not in df.columns:
@@ -2494,7 +2510,9 @@ def _load_thread_times(
     if not file_path.exists():
         return []
     try:
-        df = polars.read_parquet(file_path, columns=[thread_col, ts_col])
+        df = _scan_parquet(file_path, columns=[thread_col, ts_col]).collect(
+            streaming=True
+        )
     except Exception:  # pragma: no cover - unreadable file
         return []
     if df.height == 0 or thread_col not in df.columns or ts_col not in df.columns:
