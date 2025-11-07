@@ -51,6 +51,16 @@ class CostGuard:
             usage["messages"] += 1
         return True
 
+    def consume(self, tokens: int, channel: Optional[str] = None) -> None:
+        """Consume tokens or raise if the cap would be exceeded."""
+        if tokens <= 0:
+            return
+        if not self.try_consume(tokens, channel):
+            chan = channel or "default"
+            raise BudgetExceededError(
+                f"Budget cap {self.cap_usd:.2f} USD exceeded for channel '{chan}'."
+            )
+
     def record_message(self, channel: str, tokens: int) -> bool:
         return self.try_consume(tokens, channel)
 

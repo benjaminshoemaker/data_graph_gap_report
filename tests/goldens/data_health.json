@@ -1,74 +1,109 @@
 {
-  "tables": [
-    {
+  "tables": {
+    "dim_customer": {
+      "row_count": 0,
       "key_null_pct": 0.0,
+      "key_null_pct_daily": [],
+      "key_null_spikes": [],
       "fk_success_pct": 100.0,
-      "fk_orphan_pct": 0.0,
-      "dup_keys_pct": 0.0,
+      "fk_success_pct_daily": [],
+      "orphan_pct": 0.0,
+      "orphan_pct_daily": [],
+      "dup_key_pct": 0.0,
+      "dup_key_pct_daily": [],
       "p95_ingest_lag_min": 0.0,
-      "null_spike_days": [],
-      "table": "dim_customer",
-      "row_count": 0
+      "p95_ingest_lag_min_daily": []
     },
-    {
+    "dim_account": {
+      "row_count": 0,
       "key_null_pct": 0.0,
+      "key_null_pct_daily": [],
+      "key_null_spikes": [],
       "fk_success_pct": 100.0,
-      "fk_orphan_pct": 0.0,
-      "dup_keys_pct": 0.0,
+      "fk_success_pct_daily": [],
+      "orphan_pct": 0.0,
+      "orphan_pct_daily": [],
+      "dup_key_pct": 0.0,
+      "dup_key_pct_daily": [],
       "p95_ingest_lag_min": 0.0,
-      "null_spike_days": [],
-      "table": "dim_account",
-      "row_count": 0
+      "p95_ingest_lag_min_daily": []
     },
-    {
+    "dim_card": {
+      "row_count": 0,
       "key_null_pct": 0.0,
+      "key_null_pct_daily": [],
+      "key_null_spikes": [],
       "fk_success_pct": 100.0,
-      "fk_orphan_pct": 0.0,
-      "dup_keys_pct": 0.0,
+      "fk_success_pct_daily": [],
+      "orphan_pct": 0.0,
+      "orphan_pct_daily": [],
+      "dup_key_pct": 0.0,
+      "dup_key_pct_daily": [],
       "p95_ingest_lag_min": 0.0,
-      "null_spike_days": [],
-      "table": "dim_card",
-      "row_count": 0
+      "p95_ingest_lag_min_daily": []
     },
-    {
+    "dim_merchant": {
+      "row_count": 0,
       "key_null_pct": 0.0,
+      "key_null_pct_daily": [],
+      "key_null_spikes": [],
       "fk_success_pct": 100.0,
-      "fk_orphan_pct": 0.0,
-      "dup_keys_pct": 0.0,
+      "fk_success_pct_daily": [],
+      "orphan_pct": 0.0,
+      "orphan_pct_daily": [],
+      "dup_key_pct": 0.0,
+      "dup_key_pct_daily": [],
       "p95_ingest_lag_min": 0.0,
-      "null_spike_days": [],
-      "table": "dim_merchant",
-      "row_count": 0
+      "p95_ingest_lag_min_daily": []
     },
-    {
+    "dim_plan": {
+      "row_count": 0,
       "key_null_pct": 0.0,
+      "key_null_pct_daily": [],
+      "key_null_spikes": [],
       "fk_success_pct": 100.0,
-      "fk_orphan_pct": 0.0,
-      "dup_keys_pct": 0.0,
+      "fk_success_pct_daily": [],
+      "orphan_pct": 0.0,
+      "orphan_pct_daily": [],
+      "dup_key_pct": 0.0,
+      "dup_key_pct_daily": [],
       "p95_ingest_lag_min": 0.0,
-      "null_spike_days": [],
-      "table": "dim_plan",
-      "row_count": 0
+      "p95_ingest_lag_min_daily": []
     },
-    {
+    "fact_card_transaction": {
+      "row_count": 0,
       "key_null_pct": 0.0,
+      "key_null_pct_daily": [],
+      "key_null_spikes": [],
       "fk_success_pct": 100.0,
-      "fk_orphan_pct": 0.0,
-      "dup_keys_pct": 0.0,
+      "fk_success_pct_daily": [],
+      "orphan_pct": 0.0,
+      "orphan_pct_daily": [],
+      "dup_key_pct": 0.0,
+      "dup_key_pct_daily": [],
       "p95_ingest_lag_min": 0.0,
-      "null_spike_days": [],
-      "table": "fact_card_transaction",
-      "row_count": 0
+      "p95_ingest_lag_min_daily": []
     },
-    {
+    "fact_subscription_invoice": {
+      "row_count": 0,
       "key_null_pct": 0.0,
+      "key_null_pct_daily": [],
+      "key_null_spikes": [],
       "fk_success_pct": 100.0,
-      "fk_orphan_pct": 0.0,
-      "dup_keys_pct": 0.0,
+      "fk_success_pct_daily": [],
+      "orphan_pct": 0.0,
+      "orphan_pct_daily": [],
+      "dup_key_pct": 0.0,
+      "dup_key_pct_daily": [],
       "p95_ingest_lag_min": 0.0,
-      "null_spike_days": [],
-      "table": "fact_subscription_invoice",
-      "row_count": 0
+      "p95_ingest_lag_min_daily": []
     }
-  ]
+  },
+  "aggregates": {
+    "key_null_pct": 0.0,
+    "dup_key_pct": 0.0,
+    "fk_success_pct": 100.0,
+    "orphan_pct": 0.0,
+    "p95_ingest_lag_min": 0.0
+  }
 }

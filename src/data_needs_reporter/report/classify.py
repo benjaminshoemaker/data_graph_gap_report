@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from data_needs_reporter.report.llm import LLMClient, LLMError
+from data_needs_reporter.utils.cost_guard import CostGuard
 
 try:  # pragma: no cover - optional dependency
     import polars as pl
@@ -19,7 +20,12 @@ def _ensure_polars():
 
 
 def _estimate_tokens_from_body(body: str) -> int:
-    return max(1, len(body) // 4)
+    if not body:
+        return 1
+    char_estimate = max(1, len(body) // 4)
+    word_count = max(1, len(body.split()))
+    word_estimate = max(1, int(word_count * 0.75))
+    return max(char_estimate, word_estimate)
 
 
 def pack_thread(
@@ -30,6 +36,8 @@ def pack_thread(
     max_tokens: int = 900,
 ) -> Dict[str, Any]:
     exec_ids = set(exec_user_ids or [])
+
+    limits = {"tokens": False, "messages": False}
 
     def time_value(msg: Mapping[str, Any]) -> float:
         sent_at = msg.get("sent_at")
@@ -63,9 +71,11 @@ def pack_thread(
             return
         tokens = token_value(msg)
         if not force:
-            if len(selected) >= max_messages:
-                return
             if token_total + tokens > max_tokens:
+                limits["tokens"] = True
+                return
+            if len(selected) >= max_messages:
+                limits["messages"] = True
                 return
         selected.append(msg)
         added_ids.add(mid)
@@ -82,27 +92,18 @@ def pack_thread(
         add_message(msg, force=True)
 
     remaining = [msg for msg in ordered if msg.get("message_id") not in added_ids]
-
-    def score_value(msg: Mapping[str, Any]) -> float:
-        score = msg.get(score_field)
-        try:
-            return float(score)
-        except (TypeError, ValueError):
-            return 0.0
-
-    remaining.sort(
-        key=lambda msg: (
-            score_value(msg),
-            sort_key(msg)[0],
-        ),
-        reverse=True,
-    )
+    remaining.sort(key=lambda msg: sort_key(msg), reverse=True)
 
     for msg in remaining:
         add_message(msg)
 
     selected.sort(key=sort_key)
-    return {"messages": selected, "token_total": token_total}
+    return {
+        "messages": selected,
+        "token_total": token_total,
+        "token_limit_hit": limits["tokens"],
+        "message_limit_hit": limits["messages"],
+    }
 
 
 def _build_prompt(packed_messages: Sequence[Mapping[str, Any]]) -> str:
@@ -134,10 +135,15 @@ def classify_threads(
     temperature: float = 0.0,
     max_messages: int = 20,
     max_tokens: int = 900,
+    guard: Optional[CostGuard] = None,
 ) -> List[Dict[str, Any]]:
     predictions: List[Dict[str, Any]] = []
     consecutive_errors = 0
+    active_guard = guard or CostGuard(cap_usd=0.10, price_per_1k_tokens=0.002)
+    channel_name = source or "classification"
     for thread in threads:
+        if active_guard.stopped_due_to_cap:
+            break
         packed = pack_thread(
             thread.get("messages", []),
             exec_user_ids=exec_user_ids,
@@ -149,9 +155,16 @@ def classify_threads(
             continue
         prompt = _build_prompt(packed_messages)
         try:
-            response = llm_client.json_complete(prompt, temperature=temperature)
+            response = llm_client.json_complete(
+                prompt,
+                temperature=temperature,
+                guard=active_guard,
+                channel=channel_name,
+            )
             consecutive_errors = 0
         except LLMError as exc:
+            if active_guard.stopped_due_to_cap:
+                break
             consecutive_errors += 1
             predictions.append(
                 {

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Mapping, MutableMapping, Optional, Tuple
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 try:
     import yaml  # type: ignore
@@ -62,6 +62,20 @@ class ReportSLOs(BaseModel):
     p95_ingest_lag_min: float
 
 
+class MarketplaceEveningWindowConfig(BaseModel):
+    start_hour: int = 17
+    end_hour: int = 21
+    min_share_pct: float = 20.0
+    min_days_pct: float = 80.0
+
+
+class ReportMarketplaceConfig(BaseModel):
+    evening_window: MarketplaceEveningWindowConfig = Field(
+        default_factory=MarketplaceEveningWindowConfig
+    )
+    category_caps: Optional[Dict[str, float]] = None
+
+
 class ReportConfig(BaseModel):
     scoring_weights: Dict[str, float]
     slos: ReportSLOs
@@ -69,6 +83,7 @@ class ReportConfig(BaseModel):
     demand_base_weights: Dict[str, float]
     demand_weight_caps: Dict[str, float]
     revenue_norm: str
+    marketplace: Optional[ReportMarketplaceConfig] = None
 
 
 class BudgetConfig(BaseModel):

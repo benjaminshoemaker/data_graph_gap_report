@@ -5,13 +5,21 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional, cast
+from typing import Any, Mapping, Optional, Sequence, cast
 
 import typer
 
 from data_needs_reporter import __version__
 from data_needs_reporter.config import DEFAULT_CONFIG_PATH, AppConfig, load_config
-from data_needs_reporter.eval import DEFAULT_THEME_GATE, evaluate_labels
+from data_needs_reporter.eval import (
+    COVERAGE_GATE,
+    DEFAULT_THEME_GATE,
+    RELEVANCE_GATE,
+    THEME_SOURCES,
+    collect_eval_rows,
+    load_predictions,
+    summarize_pairs,
+)
 from data_needs_reporter.generate.comms import generate_comms
 from data_needs_reporter.generate.defects import run_typical_generation
 from data_needs_reporter.generate.warehouse import (
@@ -25,9 +33,10 @@ from data_needs_reporter.generate.warehouse import (
 from data_needs_reporter.report.llm import MockProvider, RepairingLLMClient
 from data_needs_reporter.report.metrics import (
     TABLE_METRIC_SPECS,
-    compute_data_health,
     validate_comms_targets,
     validate_event_correlation,
+    validate_marketplace_category_caps,
+    validate_marketplace_evening_coverage,
     validate_monetization_targets,
     validate_quality_targets,
     validate_reproducibility,
@@ -39,8 +48,11 @@ from data_needs_reporter.report.metrics import (
     validate_volume_targets,
     validate_warehouse_schema,
 )
-from data_needs_reporter.report.run import assess_budget_health
-from data_needs_reporter.report.scoring import compute_confidence, compute_score
+from data_needs_reporter.report.run import (
+    assess_budget_health,
+    write_data_health_report,
+    write_exec_summary,
+)
 from data_needs_reporter.utils.cost_guard import CostGuard
 from data_needs_reporter.utils.hashing import compute_file_hash
 from data_needs_reporter.utils.logging import init_logger, run_context
@@ -93,6 +105,125 @@ def _evaluate_budget_health(comms_path: Path) -> tuple[list[str], bool]:
 
     warnings, strict_failure = assess_budget_health(payload)
     return warnings, strict_failure
+
+
+def _run_labels_evaluation(
+    predictions: Any,
+    labels_dir: Path,
+    pl_module: Any,
+) -> tuple[dict[str, object], list[dict[str, object]], dict[str, dict[str, dict[str, int]]]]:
+    pl = pl_module
+    summary_sources: dict[str, object] = {}
+    per_class_rows: list[dict[str, object]] = []
+    confusion_outputs: dict[str, dict[str, dict[str, int]]] = {}
+    gates: list[dict[str, object]] = []
+    overall_true: list[str] = []
+    overall_pred: list[str] = []
+    overall_conf: list[float] = []
+    total_labels = 0
+    total_matched = 0
+
+    for source in THEME_SOURCES:
+        source_frame = predictions.filter(pl.col("source") == source)
+        (
+            theme_true,
+            theme_pred,
+            theme_conf,
+            coverage,
+            label_count,
+        ) = collect_eval_rows(source_frame, labels_dir, source=source, task="theme")
+        total_labels += label_count
+        total_matched += len(theme_true)
+        theme_metrics = summarize_pairs(theme_true, theme_pred, theme_conf)
+        theme_metrics.setdefault("overall", {})["coverage"] = coverage
+
+        summary_sources[source] = {
+            "coverage": coverage,
+            "label_count": label_count,
+            "theme": theme_metrics,
+        }
+
+        for class_name, cls_metrics in theme_metrics["per_class"].items():
+            per_class_rows.append(
+                {
+                    "source": source,
+                    "task": "theme",
+                    "class": class_name,
+                    "precision": cls_metrics["precision"],
+                    "recall": cls_metrics["recall"],
+                    "f1": cls_metrics["f1"],
+                    "support": cls_metrics["support"],
+                }
+            )
+
+        confusion_outputs[f"confusion_{source}_theme.json"] = theme_metrics["confusion"]
+
+        gates.append(
+            {
+                "name": f"{source}_theme_macro_f1",
+                "value": theme_metrics["overall"].get("macro_f1", 0.0),
+                "threshold": DEFAULT_THEME_GATE,
+                "passed": theme_metrics["overall"].get("macro_f1", 0.0)
+                >= DEFAULT_THEME_GATE,
+            }
+        )
+        gates.append(
+            {
+                "name": f"{source}_coverage",
+                "value": coverage,
+                "threshold": COVERAGE_GATE,
+                "passed": coverage >= COVERAGE_GATE,
+            }
+        )
+
+        overall_true.extend(theme_true)
+        overall_pred.extend(theme_pred)
+        overall_conf.extend(theme_conf)
+
+        if source in {"slack", "email"}:
+            rel_true, rel_pred, rel_conf, _, _ = collect_eval_rows(
+                source_frame, labels_dir, source=source, task="relevance"
+            )
+            rel_metrics = summarize_pairs(rel_true, rel_pred, rel_conf)
+            rel_metrics.setdefault("overall", {})["coverage"] = coverage
+            summary_sources[source]["relevance"] = rel_metrics
+            confusion_outputs[f"confusion_{source}_relevance.json"] = rel_metrics[
+                "confusion"
+            ]
+            for class_name, cls_metrics in rel_metrics["per_class"].items():
+                per_class_rows.append(
+                    {
+                        "source": source,
+                        "task": "relevance",
+                        "class": class_name,
+                        "precision": cls_metrics["precision"],
+                        "recall": cls_metrics["recall"],
+                        "f1": cls_metrics["f1"],
+                        "support": cls_metrics["support"],
+                    }
+                )
+            gates.append(
+                {
+                    "name": f"{source}_relevance_macro_f1",
+                    "value": rel_metrics["overall"].get("macro_f1", 0.0),
+                    "threshold": RELEVANCE_GATE,
+                    "passed": rel_metrics["overall"].get("macro_f1", 0.0)
+                    >= RELEVANCE_GATE,
+                }
+            )
+
+    overall_metrics = summarize_pairs(overall_true, overall_pred, overall_conf)
+    overall_coverage = total_matched / total_labels if total_labels else 0.0
+    overall_metrics.setdefault("overall", {})["coverage"] = overall_coverage
+
+    summary = {
+        "overall": overall_metrics,
+        "sources": summary_sources,
+    }
+    summary["gates"] = {gate["name"]: gate for gate in gates}
+    summary["gates_pass"] = all(gate.get("passed", False) for gate in gates)
+
+    return summary, per_class_rows, confusion_outputs
 
 
 @app.callback(invoke_without_command=True)
@@ -368,6 +499,7 @@ def gen_comms_cmd(
         timeout_s=15.0,
         max_output_tokens=config.classification.max_output_tokens,
         cache_dir=Path(config.cache.dir),
+        cache_enabled=config.cache.enabled,
         repair_attempts=1,
     )
     guard = CostGuard(
@@ -464,90 +596,62 @@ def run_report_cmd(
 
     now = datetime.utcnow().isoformat()
 
-    archetype_key = _detect_archetype_from_path(Path(warehouse), config)
-    data_health = compute_data_health(archetype_key, Path(warehouse))
-    if not data_health:
-        data_health = [
+    warehouse_path = Path(warehouse)
+    tz_config = getattr(getattr(config, "warehouse", object()), "tz", "UTC")
+    data_health_payload = write_data_health_report(warehouse_path, tz_config, out_dir)
+    tables_section = data_health_payload.get("tables", {})
+    table_rows: list[dict[str, object]] = []
+    if isinstance(tables_section, Mapping):
+        for table_name, metrics in sorted(tables_section.items()):
+            row: dict[str, object] = {"table": table_name}
+            if isinstance(metrics, Mapping):
+                row.update(metrics)
+            table_rows.append(row)
+    if not table_rows:
+        table_rows = [
             {
                 "table": "dim_customer",
-                "key_null_pct": 0.0,
-                "fk_orphan_pct": 0.0,
-                "dup_keys_pct": 0.0,
-                "p95_ingest_lag_min": 0.0,
-                "fk_success_pct": 100.0,
                 "row_count": 0,
+                "key_null_pct": 0.0,
+                "fk_success_pct": 100.0,
+                "orphan_pct": 0.0,
+                "dup_key_pct": 0.0,
+                "p95_ingest_lag_min": 0.0,
+                "key_null_spikes": [],
             }
         ]
-
-    (out_dir / "data_health.json").write_text(
-        json.dumps({"tables": data_health}, indent=2), encoding="utf-8"
-    )
 
     csv_path = out_dir / "data_health.csv"
     csv_fields = [
         "table",
-        "key_null_pct",
-        "fk_orphan_pct",
-        "dup_keys_pct",
-        "p95_ingest_lag_min",
-        "fk_success_pct",
-        "null_spike_days",
         "row_count",
+        "key_null_pct",
+        "fk_success_pct",
+        "orphan_pct",
+        "dup_key_pct",
+        "p95_ingest_lag_min",
+        "key_null_spikes",
     ]
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=csv_fields)
         writer.writeheader()
-        for row in data_health:
-            writer.writerow({field: row.get(field) for field in csv_fields})
+        for row in table_rows:
+            serialized: dict[str, object] = {}
+            for field in csv_fields:
+                value = row.get(field)
+                if isinstance(value, (list, dict)):
+                    value = json.dumps(value)
+                serialized[field] = value
+            writer.writerow(serialized)
 
-    themes = [
-        {
-            "theme": "data_quality",
-            "score": compute_score(0.85, 0.78, 0.6),
-            "confidence": compute_confidence(0.82, 0.7, 0.9, 0.8),
-            "summary": "Address missing customer attributes impacting revenue dashboards.",
-        },
-        {
-            "theme": "pipeline_health",
-            "score": compute_score(0.75, 0.72, 0.55),
-            "confidence": compute_confidence(0.76, 0.65, 0.8, 0.7),
-            "summary": "Stabilize order ingestion pipeline to reduce lag spikes.",
-        },
-        {
-            "theme": "governance",
-            "score": compute_score(0.6, 0.65, 0.45),
-            "confidence": compute_confidence(0.62, 0.6, 0.75, 0.6),
-            "summary": "Improve data contract coverage for marketplace sellers.",
-        },
-    ]
-
-    themes = [theme for theme in themes if theme["confidence"] >= 0.55]
-
-    (out_dir / "themes.json").write_text(
-        json.dumps({"themes": themes}, indent=2), encoding="utf-8"
+    write_exec_summary(
+        config=config,
+        warehouse_path=warehouse_path,
+        comms_path=Path(comms),
+        out_dir=out_dir,
+        data_health=data_health_payload,
+        generated_at=now,
     )
-
-    themes_md_lines = ["# Top Themes\n"]
-    for theme in themes:
-        themes_md_lines.append(
-            f"## {theme['theme'].title()}\nScore: {theme['score']:.2f} | Confidence: {theme['confidence']:.2f}\n{theme['summary']}\n"
-        )
-    (out_dir / "themes.md").write_text("\n".join(themes_md_lines), encoding="utf-8")
-
-    exec_summary = {
-        "generated_at": now,
-        "window_days": config.report.window_days,
-        "top_actions": themes[:3],
-        "notes": "Synthetic summary generated for evaluation.",
-    }
-    (out_dir / "exec_summary.json").write_text(
-        json.dumps(exec_summary, indent=2), encoding="utf-8"
-    )
-
-    exec_md = ["# Executive Summary", f"Generated: {now}"]
-    for idx, theme in enumerate(themes[:3], 1):
-        exec_md.append(f"{idx}. **{theme['theme'].title()}** – {theme['summary']}")
-    (out_dir / "exec_summary.md").write_text("\n\n".join(exec_md), encoding="utf-8")
 
     lag_daily = [
         {"day": "2024-01-01", "p95_lag_min": 110},
@@ -564,33 +668,55 @@ def run_report_cmd(
         {"day": "2024-01-02", "orphan_pct": 2.5},
         {"day": "2024-01-03", "orphan_pct": 2.1},
     ]
-    dup_by_table = {row["table"]: row.get("dup_keys_pct", 0.0) for row in data_health}
-    monthly_theme = [
-        {
-            "month": "2023-11",
-            "data_quality": 0.4,
-            "pipeline_health": 0.35,
-            "governance": 0.25,
-        },
-        {
-            "month": "2023-12",
-            "data_quality": 0.45,
-            "pipeline_health": 0.32,
-            "governance": 0.23,
-        },
-        {
-            "month": "2024-01",
-            "data_quality": 0.5,
-            "pipeline_health": 0.3,
-            "governance": 0.2,
-        },
-    ]
+    def _aggregate_daily(
+        rows: Sequence[Mapping[str, object]],
+        metric_key: str,
+        value_field: str,
+    ) -> list[dict[str, float]]:
+        totals: dict[str, float] = {}
+        counts: dict[str, int] = {}
+        for row in rows:
+            entries = row.get(metric_key)
+            if not isinstance(entries, Sequence):
+                continue
+            for entry in entries:
+                if not isinstance(entry, Mapping):
+                    continue
+                day = entry.get("date") or entry.get("day")
+                value = entry.get(value_field)
+                if day is None or value is None:
+                    continue
+                try:
+                    value_float = float(value)
+                except (TypeError, ValueError):
+                    continue
+                totals[day] = totals.get(day, 0.0) + value_float
+                counts[day] = counts.get(day, 0) + 1
+        aggregated = []
+        for day in sorted(totals.keys()):
+            count = counts.get(day, 1)
+            aggregated.append({"day": day, value_field: totals[day] / count})
+        return aggregated
 
+    lag_daily = _aggregate_daily(table_rows, "p95_ingest_lag_min_daily", "minutes")
+    key_null_daily = _aggregate_daily(table_rows, "key_null_pct_daily", "pct")
+    orphan_daily = _aggregate_daily(table_rows, "orphan_pct_daily", "pct")
+    dup_by_table = {
+        str(row.get("table")): float(row.get("dup_key_pct", 0.0) or 0.0)
+        for row in table_rows
+    }
     plot_lag_p95_daily(lag_daily, figures_dir / "lag_p95_daily.png")
     plot_key_null_pct_daily(key_null_daily, figures_dir / "key_null_pct_daily.png")
     plot_orphan_pct_daily(orphan_daily, figures_dir / "orphan_pct_daily.png")
     plot_dup_key_pct_bar(dup_by_table, figures_dir / "dup_key_pct_bar.png")
-    plot_theme_demand_monthly(monthly_theme, figures_dir / "theme_demand_monthly.png")
+    plot_theme_demand_monthly(
+        [
+            {"month": "2023-11", "data_quality": 0.40, "pipeline_health": 0.35, "governance": 0.25},
+            {"month": "2023-12", "data_quality": 0.45, "pipeline_health": 0.32, "governance": 0.23},
+            {"month": "2024-01", "data_quality": 0.50, "pipeline_health": 0.30, "governance": 0.20},
+        ],
+        figures_dir / "theme_demand_monthly.png",
+    )
 
     budget = {
         "generated_at": now,
@@ -615,10 +741,13 @@ def run_report_cmd(
         logger.info("run-report completed for %s", out_dir)
 
 
-def _run_checks(warehouse: Path, comms: Path, strict: bool) -> dict[str, object]:
+def _run_checks(
+    warehouse: Path, comms: Path, strict: bool, config: AppConfig
+) -> dict[str, object]:
     fail_marker = (warehouse / "FAIL").exists() or (comms / "FAIL").exists()
     dry_run_warehouse = (warehouse / ".dry_run").exists()
     mock_comms = (comms / ".mock_llm").exists()
+    archetype_key = _detect_archetype_from_path(warehouse, config)
 
     schema_result = validate_warehouse_schema(warehouse)
     volume_result = validate_volume_targets(warehouse)
@@ -632,7 +761,9 @@ def _run_checks(warehouse: Path, comms: Path, strict: bool) -> dict[str, object]
         trajectory_result = {"passed": True, "issues": [], "detail": skip_detail}
     else:
         quality_result = validate_quality_targets(warehouse)
-        seasonality_result = validate_seasonality_targets(warehouse)
+        seasonality_result = validate_seasonality_targets(
+            warehouse, tz=getattr(config.warehouse, "tz", None)
+        )
         taxonomy_result = validate_taxonomy_targets(warehouse)
         monetization_result = validate_monetization_targets(warehouse)
         trajectory_result = validate_trajectory_targets(warehouse)
@@ -720,6 +851,42 @@ def _run_checks(warehouse: Path, comms: Path, strict: bool) -> dict[str, object]
             "detail": spend_result["detail"],
         },
     ]
+    if not dry_run_warehouse and archetype_key == "marketplace":
+        marketplace_cfg = getattr(config.report, "marketplace", None)
+        evening_cfg = getattr(marketplace_cfg, "evening_window", None)
+        start_hour = getattr(evening_cfg, "start_hour", 17)
+        end_hour = getattr(evening_cfg, "end_hour", 21)
+        min_share_pct = getattr(evening_cfg, "min_share_pct", 20.0)
+        min_days_pct = getattr(evening_cfg, "min_days_pct", 80.0)
+        evening_result = validate_marketplace_evening_coverage(
+            warehouse,
+            tz=config.warehouse.tz,
+            window_days=config.report.window_days,
+            start_hour=start_hour,
+            end_hour=end_hour,
+            min_share_pct=min_share_pct,
+            min_days_pct=min_days_pct,
+        )
+        checks.append(
+            {
+                "name": "marketplace_evening_coverage",
+                "passed": evening_result["passed"],
+                "detail": evening_result["detail"],
+            }
+        )
+        category_caps_cfg = (
+            marketplace_cfg.category_caps if marketplace_cfg else None
+        )
+        category_result = validate_marketplace_category_caps(
+            warehouse, category_caps=category_caps_cfg
+        )
+        checks.append(
+            {
+                "name": "marketplace_category_caps",
+                "passed": category_result["passed"],
+                "detail": category_result["detail"],
+            }
+        )
     overall_pass = all(check["passed"] for check in checks)
     return {
         "checks": checks,
@@ -738,46 +905,236 @@ def validate_cmd(
 ) -> None:
     ctx_obj = ctx.obj or {}
     logger = ctx_obj.get("logger")
+    config = cast(AppConfig, ctx_obj.get("config"))
+    if config is None:
+        config = load_config(
+            default_path=DEFAULT_CONFIG_PATH,
+            override_yaml_path_or_none=None,
+            env=os.environ,
+            cli_overrides={},
+        )
+        ctx_obj["config"] = config
     out_dir = Path(out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    result = _run_checks(warehouse, comms, strict)
+    result = _run_checks(warehouse, comms, strict, config)
+    checks: list[dict[str, object]] = list(result.get("checks", []))
+    issues: list[str] = [
+        f"{check.get('name')} failed: {check.get('detail')}"
+        for check in checks
+        if not check.get("passed", False)
+    ]
+
+    slo_config = getattr(config.report, "slos", {})
+    if hasattr(slo_config, "model_dump"):
+        slo_thresholds: Mapping[str, float] = slo_config.model_dump()
+    elif isinstance(slo_config, Mapping):
+        slo_thresholds = dict(slo_config)
+    else:
+        slo_thresholds = {}
+    metric_aliases: Mapping[str, Sequence[str]] = {
+        "key_null_pct": ("key_null_pct",),
+        "fk_orphan_pct": ("fk_orphan_pct", "orphan_pct"),
+        "dup_keys_pct": ("dup_keys_pct", "dup_key_pct"),
+        "p95_ingest_lag_min": ("p95_ingest_lag_min",),
+    }
+
+    def _extract_metric(source: object, metric_name: str) -> Optional[float]:
+        if not isinstance(source, Mapping):
+            return None
+        for alias in metric_aliases.get(metric_name, (metric_name,)):
+            value = source.get(alias)
+            if value is None:
+                continue
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    def _format_value(metric_name: str, value: float) -> str:
+        if metric_name == "p95_ingest_lag_min":
+            return f"{value:.2f} min"
+        return f"{value:.2f}%"
+
+    data_health_path = out_dir.parent / "data_health.json"
+    data_health_payload: Optional[Mapping[str, object]] = None
+    if data_health_path.exists():
+        try:
+            data_health_payload = json.loads(
+                data_health_path.read_text(encoding="utf-8")
+            )
+        except json.JSONDecodeError as exc:
+            detail = f"Unable to parse {data_health_path}: {exc}"
+            checks.append(
+                {"name": "data_health", "passed": False, "detail": detail}
+            )
+            issues.append(detail)
+            data_health_payload = None
+    else:
+        detail = f"Missing data health report at {data_health_path}"
+        checks.append({"name": "data_health", "passed": False, "detail": detail})
+        issues.append(detail)
+
+    aggregates: Mapping[str, object] = {}
+    tables_section: object = {}
+    if isinstance(data_health_payload, Mapping):
+        aggregates_raw = data_health_payload.get("aggregates", {})
+        if isinstance(aggregates_raw, Mapping):
+            aggregates = aggregates_raw  # type: ignore[assignment]
+        tables_section = data_health_payload.get("tables", {})
+
+    def _lookup_table(name: str) -> Optional[Mapping[str, object]]:
+        if isinstance(tables_section, Mapping):
+            table_entry = tables_section.get(name)
+            return table_entry if isinstance(table_entry, Mapping) else None
+        if isinstance(tables_section, list):
+            for entry in tables_section:
+                if (
+                    isinstance(entry, Mapping)
+                    and str(entry.get("table")) == name
+                ):
+                    return entry
+        return None
+
+    invoice_metrics = _lookup_table("fact_subscription_invoice")
+
+    for metric_name, threshold_raw in slo_thresholds.items():
+        try:
+            threshold = float(threshold_raw)
+        except (TypeError, ValueError):
+            continue
+        agg_value = _extract_metric(aggregates, metric_name)
+        agg_passed = agg_value is not None and agg_value <= threshold
+        if agg_value is None:
+            detail = f"Aggregate {metric_name} missing in {data_health_path.name}"
+            agg_passed = False
+        else:
+            detail = (
+                f"Aggregate {metric_name} {_format_value(metric_name, agg_value)} "
+                f"(limit {_format_value(metric_name, threshold)})"
+            )
+        checks.append(
+            {
+                "name": f"slo.aggregate.{metric_name}",
+                "passed": agg_passed,
+                "detail": detail,
+            }
+        )
+        if not agg_passed:
+            issues.append(detail)
+
+        table_value = _extract_metric(invoice_metrics, metric_name)
+        table_passed = table_value is not None and table_value <= threshold
+        if invoice_metrics is None:
+            table_detail = "fact_subscription_invoice metrics missing"
+            table_passed = False
+        elif table_value is None:
+            table_detail = (
+                f"fact_subscription_invoice missing {metric_name} metric"
+            )
+            table_passed = False
+        else:
+            table_detail = (
+                f"fact_subscription_invoice {metric_name} "
+                f"{_format_value(metric_name, table_value)} "
+                f"(limit {_format_value(metric_name, threshold)})"
+            )
+        checks.append(
+            {
+                "name": f"slo.fact_subscription_invoice.{metric_name}",
+                "passed": table_passed,
+                "detail": table_detail,
+            }
+        )
+        if not table_passed:
+            issues.append(table_detail)
+
+    overall_pass = all(check.get("passed", False) for check in checks)
+    exit_code = 0 if (overall_pass or not strict) else 1
+
+    detail_message = (
+        "All checks passed."
+        if overall_pass
+        else ("; ".join(issues) if issues else "Check qc_checks.csv for details.")
+    )
+
+    summary = {
+        "passed": overall_pass,
+        "overall_pass": overall_pass,
+        "issues": issues,
+        "detail": detail_message,
+        "checks": checks,
+        "exit_code": exit_code,
+    }
+
     summary_path = out_dir / "qc_summary.json"
     checks_csv = out_dir / "qc_checks.csv"
 
-    summary_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     with checks_csv.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=["name", "passed", "detail"])
         writer.writeheader()
-        writer.writerows(result["checks"])
+        writer.writerows(checks)
 
     if logger:
         logger.info("Validation summary written to %s", summary_path)
 
-    if result["exit_code"] != 0:
+    if exit_code != 0:
         raise typer.Exit(code=1)
 
 
 @app.command("eval-labels")
 def eval_labels_cmd(
     ctx: typer.Context,
-    preds: Path = typer.Option(..., "--pred", is_flag=False),
-    labels: Path = typer.Option(..., "--labels", is_flag=False),
-    out: Path = typer.Option(..., "--out", is_flag=False),
-    gate_f1: float = typer.Option(DEFAULT_THEME_GATE, "--gate-f1", is_flag=False),
+    preds: Path = typer.Option(..., "--pred", help="Directory with prediction parquet files."),
+    labels: Path = typer.Option(..., "--labels", help="Directory containing oracle label parquet files."),
+    out: Path = typer.Option(..., "--out", help="Evaluation report output directory."),
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit with non-zero code when any evaluation gate fails.",
+    ),
 ) -> None:
     ctx_obj = ctx.obj or {}
     logger = ctx_obj.get("logger")
+    try:
+        import polars as pl  # type: ignore
+    except ImportError as exc:  # pragma: no cover
+        typer.echo("polars is required for eval-labels", err=True)
+        if logger:
+            logger.error("polars is required for eval-labels")
+        raise typer.Exit(code=1) from exc
+
+    predictions = load_predictions(preds)
+    labels_dir = Path(labels)
+    summary, per_class_rows, confusion_outputs = _run_labels_evaluation(
+        predictions, labels_dir, pl
+    )
+
     run_id = (ctx_obj or {}).get("run_id")
     out_base = Path(out)
     if run_id and out_base.name != run_id:
         out_dir = out_base / run_id
     else:
         out_dir = out_base
-    summary = evaluate_labels(preds, labels, out_dir, gate_f1=gate_f1)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    summary["run_id"] = run_id
+
+    summary_path = out_dir / "summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+    if per_class_rows:
+        pl.DataFrame(per_class_rows).write_csv(out_dir / "per_class.csv")
+
+    for filename, matrix in confusion_outputs.items():
+        (out_dir / filename).write_text(json.dumps(matrix, indent=2), encoding="utf-8")
+
     if logger:
         logger.info("Evaluation summary written to %s", out_dir)
-    if not summary.get("gates_pass", False):
+
+    if strict and not summary.get("gates_pass", False):
         raise typer.Exit(code=1)
 
 

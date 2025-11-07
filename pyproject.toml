@@ -1,6 +1,38 @@
+[project]
+name = "data-needs-reporter"
+version = "0.1.2"
+description = "CLI for generating synthetic data needs reports."
+readme = "README.md"
+authors = [{ name = "Data Needs Reporter Team", email = "maintainers@dataneedsreporter.dev" }]
+license = { text = "Proprietary" }
+requires-python = ">=3.11"
+keywords = ["data", "analytics", "cli", "synthetic-data"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Information Technology",
+    "License :: Other/Proprietary License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Office/Business :: Financial :: Accounting",
+]
+dependencies = [
+    "typer[all]>=0.9.0,<0.10",
+    "pydantic>=2.6.4,<3.0.0",
+    "duckdb>=0.10.3,<0.11.0",
+    "pyarrow>=15.0.1,<16.0.0",
+    "polars==0.19.19",
+    "matplotlib>=3.8.3,<4.0.0",
+    "click>=8.1,<8.2",
+]
+
+[project.scripts]
+dnr = "data_needs_reporter.cli:app"
+
 [tool.poetry]
 name = "data-needs-reporter"
-version = "0.1.1"
+version = "0.1.2"
 description = "CLI for generating synthetic data needs reports."
 authors = ["Data Needs Reporter Team <maintainers@dataneedsreporter.dev>"]
 license = "Proprietary"
@@ -41,8 +73,17 @@ isort = "^5.13.2"
 dnr = "data_needs_reporter.cli:app"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"data_needs_reporter" = ["configs/default.yaml"]
 
 [tool.coverage.run]
 source = ["data_needs_reporter"]

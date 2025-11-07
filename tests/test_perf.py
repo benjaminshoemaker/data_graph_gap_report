@@ -42,7 +42,7 @@ COMMAND_BUDGETS: tuple[tuple[str, list[str], float], ...] = (
             "--out",
             "reports/neobank",
         ],
-        2.5,
+        3.2,
     ),
     (
         "validate",

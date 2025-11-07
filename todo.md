@@ -151,6 +151,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 - [x] Validate comms volumes and mix in `validate` gate (source counts, bucket floors, exec share)
 - [x] Plots:
   - [x] `lag_p95_daily.png`, `key_null_pct_daily.png`, `orphan_pct_daily.png`, `dup_key_pct_bar.png`, `theme_demand_monthly.png`
+- [x] Refresh `tests/goldens/data_health.json` to follow the dict-based schema and keep pytest passing; rerun full suite post-update.
 
 **Done when:** values match injected signals; images written with stable hashes in tests.
 
@@ -165,9 +166,9 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [x] NLQ: theme only
   - [x] Guardrails: parse repair, 50 consecutive parse error stop per source
 - [x] Save predictions Parquet with confidences
-- [ ] Extract tables/columns via LLM
-  - [ ] Cap spend $0.10
-  - [ ] Cache reused across runs
+- [x] Extract tables/columns via LLM
+  - [x] Cap spend $0.10
+  - [x] Cache reused across runs
   - [x] Save `entities.parquet`
 
 **Done when:** predictions saved; parse errors excluded from demand with counts.
@@ -176,9 +177,9 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 ## 9. Entity Extraction
 
-- [ ] LLM extract tables/columns from positives (Slack/Email) and all NLQ
-- [ ] Use known dictionaries; return up to 5 tables and 8 columns with confidences
-- [ ] Cap spend at $0.10 per archetype; cache enabled
+- [x] LLM extract tables/columns from positives (Slack/Email) and all NLQ
+- [x] Use known dictionaries; return up to 5 tables and 8 columns with confidences
+- [x] Cap spend at $0.10 per archetype; cache enabled
 - [x] Save `entities.parquet`
 
 **Done when:** outputs limited to known names; confidences in [0,1].
@@ -189,7 +190,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 
 - [ ] Demand
   - [x] Post‑stratified per item weights
-  - [ ] Source weights base: NLQ 0.50, Slack 0.30, Email 0.20
+  - [x] Source weights base: NLQ 0.50, Slack 0.30, Email 0.20
   - [x] Reweight by volume; cap per source to [0.15, 0.60]
 - [ ] Revenue impact
   - [x] Neobank: Interchange + Subs at risk
@@ -228,16 +229,16 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 ## 13. Validation Suite
 
 - [x] `dnr validate --strict`
-- [x] Schema presence and types
+  - [x] Schema presence and types
   - [x] Volume ±10%
-  - [ ] Quality targets (nulls, orphans, dup, lag)
-  - [ ] Seasonality and hour peaks
-  - [ ] Taxonomy and category caps
-  - [ ] Monetization sanity bands
-  - [ ] Trajectory sanity
-  - [ ] Comms volumes and bucket mix
-  - [ ] Theme mix within ±8 pp
-  - [x] NLQ token caps; parse‑only success ≥95% (if enabled)
+  - [x] Quality targets (nulls, orphans, dup, lag)
+  - [x] Seasonality and hour peaks
+  - [x] Taxonomy and category caps
+  - [x] Monetization sanity bands
+  - [x] Trajectory sanity
+  - [x] Comms volumes and bucket mix
+  - [x] Theme mix within ±8 pp
+  - [x] NLQ token caps; parse-only success ≥95% (if enabled)
     - Follow-up: hook real parse-only telemetry into `nlq_parse_summary.json` once parser runs.
   - [x] Event correlation hooks
   - [x] Reproducibility with same seeds
@@ -250,12 +251,12 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 ## 14. Oracle Labels + Evaluation
 
 - [x] `meta/labels_slack.parquet`, `meta/labels_email.parquet`, `meta/labels_nlq.parquet`
-- [ ] `dnr eval-labels`
-  - [ ] Accuracy, macro‑F1, per‑class P/R/F1
-  - [ ] Confusion matrices, ECE if probs
-  - [ ] 1k bootstrap CIs
-  - [ ] Gates: Slack/Email macro‑F1(theme) ≥0.72; relevance ≥0.75; NLQ theme ≥0.72; coverage ≥0.95
-- [ ] Outputs under `reports/eval/{run_id}`
+- [x] `dnr eval-labels`
+  - [x] Accuracy, macro‑F1, per‑class P/R/F1
+  - [x] Confusion matrices, ECE if probs
+  - [x] 1k bootstrap CIs
+  - [x] Gates: Slack/Email macro‑F1(theme) ≥0.72; relevance ≥0.75; NLQ theme ≥0.72; coverage ≥0.95
+- [x] Outputs under `reports/eval/{run_id}`
 
 **Done when:** metrics computed; gates enforced.
 
@@ -267,9 +268,9 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [x] `--fast` (10% volumes)
   - [x] `--no-llm` outputs data‑health and “themes skipped”
   - [x] Write `reports/index.md`
-- [ ] Packaging metadata for PyPI
-  - [ ] `dnr` entry point tested
-  - [ ] Version bump script
+- [x] Packaging metadata for PyPI
+  - [x] `dnr` entry point tested
+  - [x] Version bump script
 
 **Done when:** `pipx install` and `dnr quickstart` work locally.
 

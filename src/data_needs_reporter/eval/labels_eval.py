@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
 import math
 import random
 from pathlib import Path
-from typing import Dict, List, Mapping, Sequence
+from typing import Callable, Dict, Mapping, Sequence
 
 import polars as pl
 
@@ -17,9 +16,27 @@ THEME_SOURCES: Mapping[str, Dict[str, str]] = {
 DEFAULT_THEME_GATE = 0.72
 RELEVANCE_GATE = 0.75
 COVERAGE_GATE = 0.95
-BOOTSTRAP_SAMPLES = 200
+BOOTSTRAP_SAMPLES = 1000
 BOOTSTRAP_SEED = 42
 ECE_BINS = 10
+
+
+__all__ = [
+    "DEFAULT_THEME_GATE",
+    "RELEVANCE_GATE",
+    "COVERAGE_GATE",
+    "THEME_SOURCES",
+    "load_predictions",
+    "collect_eval_rows",
+    "compute_confusion",
+    "per_class_metrics",
+    "macro_f1",
+    "compute_accuracy",
+    "expected_calibration_error",
+    "bootstrap_ci",
+    "summarize_pairs",
+    "evaluate_labels",
+]
 
 
 def _load_parquet(path: Path) -> pl.DataFrame:
@@ -31,80 +48,172 @@ def _load_parquet(path: Path) -> pl.DataFrame:
     return df
 
 
-def _load_predictions(preds_dir: Path) -> pl.DataFrame:
-    preds_dir = Path(preds_dir)
-    direct = preds_dir / "predictions.parquet"
-    frames: List[pl.DataFrame] = []
-    if direct.exists():
-        frames.append(pl.read_parquet(direct))
+def load_predictions(pred_dir: Path) -> pl.DataFrame:
+    """Load prediction parquet files and normalize the source column."""
+
+    pred_dir = Path(pred_dir)
+    if pred_dir.is_file():
+        frames = [pl.read_parquet(pred_dir)]
     else:
-        parquet_files = sorted(preds_dir.glob("*.parquet"))
-        if not parquet_files:
-            raise FileNotFoundError(f"No prediction parquet files under {preds_dir}")
-        for file_path in parquet_files:
-            df = pl.read_parquet(file_path)
-            if "source" not in df.columns:
-                inferred = None
-                lower = file_path.name.lower()
-                for source in THEME_SOURCES:
-                    if source in lower:
-                        inferred = source
-                        break
-                if inferred is None:
-                    raise ValueError(
-                        f"Prediction file {file_path} missing 'source' column and unable to infer source."
-                    )
-                df = df.with_columns(pl.lit(inferred).alias("source"))
-            frames.append(df)
+        direct = pred_dir / "predictions.parquet"
+        frames: list[pl.DataFrame] = []
+        if direct.exists():
+            frames.append(pl.read_parquet(direct))
+        else:
+            parquet_files = sorted(pred_dir.glob("*.parquet"))
+            if not parquet_files:
+                raise FileNotFoundError(
+                    f"No prediction parquet files found under {pred_dir}"
+                )
+            for file_path in parquet_files:
+                df = pl.read_parquet(file_path)
+                if "source" not in df.columns:
+                    inferred = None
+                    lower_name = file_path.name.lower()
+                    for source_name in THEME_SOURCES:
+                        if source_name in lower_name:
+                            inferred = source_name
+                            break
+                    if inferred is None:
+                        raise ValueError(
+                            f"Unable to infer source for {file_path}; add a 'source' column."
+                        )
+                    df = df.with_columns(pl.lit(inferred).alias("source"))
+                frames.append(df)
+        if not frames:
+            raise ValueError(f"No prediction frames read from {pred_dir}")
     predictions = pl.concat(frames, how="vertical_relaxed")
     if "source" not in predictions.columns:
-        raise ValueError("Predictions must include a 'source' column.")
-    predictions = predictions.with_columns(pl.col("source").str.to_lowercase())
-    return predictions
+        raise ValueError("Predictions must include a 'source' column")
+    return predictions.with_columns(pl.col("source").str.to_lowercase())
 
 
-def _load_labels(labels_dir: Path) -> Dict[str, pl.DataFrame]:
+def _prepare_joined(
+    predictions: pl.DataFrame, labels: pl.DataFrame, id_col: str
+) -> pl.DataFrame:
+    if id_col not in predictions.columns:
+        raise ValueError(f"Predictions missing id column '{id_col}'")
+    if id_col not in labels.columns:
+        raise ValueError(f"Labels missing id column '{id_col}'")
+
+    pred_cols = [id_col]
+    rename_map: dict[str, str] = {}
+    for column in ("theme", "relevance", "confidence"):
+        if column in predictions.columns:
+            pred_cols.append(column)
+            rename_map[column] = f"{column}_pred"
+    pred_subset = predictions.select([pl.col(col) for col in pred_cols]).rename(
+        rename_map
+    )
+
+    label_cols = [id_col]
+    label_rename: dict[str, str] = {}
+    for column in ("theme", "relevance"):
+        if column in labels.columns:
+            label_cols.append(column)
+            label_rename[column] = f"{column}_true"
+    label_subset = labels.select(label_cols).rename(label_rename)
+
+    return pred_subset.join(label_subset, on=id_col, how="inner")
+
+
+def collect_eval_rows(
+    pred_df: pl.DataFrame,
+    labels_dir: Path,
+    *,
+    source: str | None = None,
+    task: str = "theme",
+    threshold: float = 0.5,
+) -> tuple[list[str], list[str], list[float], float, int]:
+    """Join predictions with labels and return aligned pairs for a task."""
+
     labels_dir = Path(labels_dir)
-    label_frames: Dict[str, pl.DataFrame] = {}
-    for source, info in THEME_SOURCES.items():
-        path = labels_dir / info["labels"]
-        df = _load_parquet(path)
-        label_frames[source] = df
-    return label_frames
+    if source is None:
+        if pred_df.height == 0:
+            raise ValueError("Source must be provided when prediction frame is empty")
+        if "source" not in pred_df.columns:
+            raise ValueError("Predictions missing 'source' column")
+        unique_sources = pred_df.get_column("source").unique().to_list()
+        if len(unique_sources) != 1:
+            raise ValueError("pred_df must contain exactly one source when source is omitted")
+        source = str(unique_sources[0])
+    source = source.lower()
+
+    if source not in THEME_SOURCES:
+        raise ValueError(f"Unsupported source '{source}'")
+
+    info = THEME_SOURCES[source]
+    labels = _load_parquet(labels_dir / info["labels"])
+
+    if task == "theme" and "theme" not in pred_df.columns:
+        raise ValueError("Predictions missing 'theme' column for theme evaluation")
+    if task == "relevance" and "relevance" not in pred_df.columns:
+        raise ValueError("Predictions missing 'relevance' column for relevance evaluation")
+
+    joined = _prepare_joined(pred_df, labels, info["id"])
+    coverage = joined.height / labels.height if labels.height else 0.0
+
+    if task == "theme":
+        true_labels = (
+            joined["theme_true"].to_list() if "theme_true" in joined.columns else []
+        )
+        pred_labels = (
+            joined["theme_pred"].to_list() if "theme_pred" in joined.columns else []
+        )
+        confidences = (
+            [
+                max(0.0, min(1.0, float(val)))
+                for val in joined["confidence_pred"].to_list()
+            ]
+            if "confidence_pred" in joined.columns
+            else []
+        )
+    elif task == "relevance":
+        if "relevance_true" not in joined.columns or "relevance_pred" not in joined.columns:
+            raise ValueError(f"Relevance columns missing for source '{source}'")
+        true_labels = [
+            "positive" if float(val) >= threshold else "negative"
+            for val in joined["relevance_true"].to_list()
+        ]
+        pred_scores = [
+            max(0.0, min(1.0, float(val) if val is not None else 0.0))
+            for val in joined["relevance_pred"].to_list()
+        ]
+        pred_labels = ["positive" if score >= threshold else "negative" for score in pred_scores]
+        confidences = pred_scores
+    else:
+        raise ValueError(f"Unsupported task '{task}'")
+
+    return true_labels, pred_labels, confidences, coverage, labels.height
 
 
-def _unique_classes(
-    true_labels: Sequence[str], pred_labels: Sequence[str]
-) -> List[str]:
-    classes: List[str] = []
-    for value in list(true_labels) + list(pred_labels):
-        if value not in classes:
-            classes.append(value)
-    return classes
-
-
-def _confusion_matrix(
-    true_labels: Sequence[str], pred_labels: Sequence[str], classes: Sequence[str]
-) -> Dict[str, Dict[str, int]]:
-    confusion: Dict[str, Dict[str, int]] = {
-        cls: {other: 0 for other in classes} for cls in classes
+def compute_confusion(
+    predictions: Sequence[str],
+    truths: Sequence[str],
+    classes: Sequence[str] | None = None,
+) -> dict[str, dict[str, int]]:
+    label_set = list(classes) if classes is not None else sorted(
+        {str(val) for val in truths} | {str(val) for val in predictions}
+    )
+    confusion: dict[str, dict[str, int]] = {
+        cls: {other: 0 for other in label_set} for cls in label_set
     }
-    for true, pred in zip(true_labels, pred_labels):
-        if true not in confusion:
-            confusion[true] = {other: 0 for other in classes}
-        if pred not in confusion[true]:
-            for cls in confusion:
-                if pred not in confusion[cls]:
-                    confusion[cls][pred] = 0
-            confusion[true][pred] = 0
-        confusion[true][pred] += 1
+    for truth, pred in zip(truths, predictions):
+        if truth not in confusion:
+            confusion[truth] = {other: 0 for other in label_set}
+        if pred not in confusion[truth]:
+            for row in confusion.values():
+                if pred not in row:
+                    row[pred] = 0
+        confusion[truth][pred] += 1
     return confusion
 
 
-def _per_class_metrics(
-    confusion: Dict[str, Dict[str, int]], classes: Sequence[str]
-) -> Dict[str, Dict[str, float]]:
-    per_class: Dict[str, Dict[str, float]] = {}
+def per_class_metrics(
+    confusion: Mapping[str, Mapping[str, int]],
+    classes: Sequence[str],
+) -> dict[str, dict[str, float]]:
+    metrics: dict[str, dict[str, float]] = {}
     for cls in classes:
         tp = confusion.get(cls, {}).get(cls, 0)
         fp = sum(
@@ -114,340 +223,158 @@ def _per_class_metrics(
             confusion.get(cls, {}).get(other, 0) for other in classes if other != cls
         )
         support = tp + fn
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        recall = tp / support if support > 0 else 0.0
-        if precision + recall > 0:
-            f1 = 2 * precision * recall / (precision + recall)
-        else:
-            f1 = 0.0
-        per_class[cls] = {
+        precision = tp / (tp + fp) if (tp + fp) else 0.0
+        recall = tp / support if support else 0.0
+        f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0.0
+        metrics[cls] = {
             "precision": precision,
             "recall": recall,
             "f1": f1,
             "support": support,
         }
-    return per_class
+    return metrics
 
 
-def _accuracy(confusion: Dict[str, Dict[str, int]]) -> float:
-    total = 0
-    correct = 0
-    for true, row in confusion.items():
-        for pred, value in row.items():
-            total += value
-            if true == pred:
-                correct += value
-    return correct / total if total else 0.0
-
-
-def _macro_f1(per_class: Mapping[str, Mapping[str, float]]) -> float:
-    scores = [metrics["f1"] for metrics in per_class.values() if metrics["support"] > 0]
+def macro_f1(per_class: Mapping[str, Mapping[str, float]]) -> float:
+    scores = [vals["f1"] for vals in per_class.values() if vals.get("support", 0) > 0]
     return sum(scores) / len(scores) if scores else 0.0
 
 
-def _expected_calibration_error(
-    confidences: Sequence[float], correct: Sequence[bool], bins: int = ECE_BINS
+def compute_accuracy(confusion: Mapping[str, Mapping[str, int]]) -> float:
+    total = 0
+    correct = 0
+    for cls, preds in confusion.items():
+        for pred, count in preds.items():
+            total += count
+            if cls == pred:
+                correct += count
+    return correct / total if total else 0.0
+
+
+def expected_calibration_error(
+    confidences: Sequence[float],
+    correct: Sequence[bool],
+    bins: int = ECE_BINS,
 ) -> float:
-    if not confidences:
+    pairs = list(zip(confidences, correct))
+    if not pairs or bins <= 0:
         return 0.0
-    total = len(confidences)
-    bin_totals = [0] * bins
-    bin_correct = [0] * bins
-    bin_conf_sum = [0.0] * bins
-    for conf, is_correct in zip(confidences, correct):
+    totals = [0] * bins
+    sum_correct = [0] * bins
+    sum_conf = [0.0] * bins
+    for conf, is_correct in pairs:
         if not isinstance(conf, (int, float)) or math.isnan(conf):
             conf = 1.0
         conf = max(0.0, min(1.0, float(conf)))
         idx = min(bins - 1, int(conf * bins))
-        bin_totals[idx] += 1
-        bin_correct[idx] += 1 if is_correct else 0
-        bin_conf_sum[idx] += conf
+        totals[idx] += 1
+        sum_correct[idx] += 1 if is_correct else 0
+        sum_conf[idx] += conf
+    total_count = len(pairs)
     ece = 0.0
-    for total_bin, correct_bin, conf_sum in zip(bin_totals, bin_correct, bin_conf_sum):
+    for total_bin, correct_bin, conf_sum in zip(totals, sum_correct, sum_conf):
         if total_bin == 0:
             continue
         acc = correct_bin / total_bin
         avg_conf = conf_sum / total_bin
-        ece += abs(acc - avg_conf) * (total_bin / total)
+        ece += abs(acc - avg_conf) * (total_bin / total_count)
     return ece
 
 
-def _bootstrap_macro_f1(
+def _resample_metric_factory(
     true_labels: Sequence[str],
     pred_labels: Sequence[str],
     classes: Sequence[str],
-    samples: int,
-    seed: int,
-) -> Dict[str, float]:
+    kind: str,
+) -> Callable[[random.Random], float]:
     n = len(true_labels)
     if n == 0:
-        return {"lower": 0.0, "upper": 0.0}
-    rng = random.Random(seed)
-    scores: List[float] = []
-    for _ in range(samples):
+        return lambda *_: 0.0
+
+    def _metric(rng: random.Random) -> float:
         indices = [rng.randrange(n) for _ in range(n)]
         sample_true = [true_labels[i] for i in indices]
         sample_pred = [pred_labels[i] for i in indices]
-        confusion = _confusion_matrix(sample_true, sample_pred, classes)
-        per_class = _per_class_metrics(confusion, classes)
-        scores.append(_macro_f1(per_class))
-    scores.sort()
-    lower_idx = max(0, int(0.025 * len(scores)) - 1)
-    upper_idx = min(len(scores) - 1, int(0.975 * len(scores)))
-    return {"lower": scores[lower_idx], "upper": scores[upper_idx]}
+        confusion = compute_confusion(sample_pred, sample_true, classes)
+        if kind == "macro_f1":
+            return macro_f1(per_class_metrics(confusion, classes))
+        if kind == "accuracy":
+            return compute_accuracy(confusion)
+        raise ValueError(f"Unsupported metric kind '{kind}'")
+
+    return _metric
 
 
-def _classification_metrics(
+def bootstrap_ci(
+    metric_fn: Callable[[random.Random], float],
+    n: int = BOOTSTRAP_SAMPLES,
+    seed: int = BOOTSTRAP_SEED,
+) -> tuple[float, float]:
+    if n <= 0:
+        raise ValueError("n must be positive for bootstrap_ci")
+    rng = random.Random(seed)
+    values = [metric_fn(rng) for _ in range(n)]
+    values.sort()
+    lower_idx = max(0, int(0.025 * n))
+    upper_idx = min(n - 1, int(0.975 * n))
+    return values[lower_idx], values[upper_idx]
+
+
+def summarize_pairs(
     true_labels: Sequence[str],
     pred_labels: Sequence[str],
-    confidences: Sequence[float],
-    classes: Sequence[str],
-    coverage: float,
-) -> Dict[str, object]:
-    confusion = _confusion_matrix(true_labels, pred_labels, classes)
-    per_class = _per_class_metrics(confusion, classes)
-    accuracy = _accuracy(confusion)
-    macro_f1 = _macro_f1(per_class)
-    correct_flags = [t == p for t, p in zip(true_labels, pred_labels)]
-    ece = _expected_calibration_error(confidences, correct_flags)
-    ci = _bootstrap_macro_f1(
-        true_labels, pred_labels, classes, BOOTSTRAP_SAMPLES, BOOTSTRAP_SEED
+    confidences: Sequence[float] | None = None,
+) -> dict[str, object]:
+    confidences = list(confidences or [])
+    classes = sorted({str(val) for val in true_labels} | {str(val) for val in pred_labels})
+    if not true_labels:
+        confusion = {cls: {other: 0 for other in classes} for cls in classes}
+        per_class = {
+            cls: {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 0}
+            for cls in classes
+        }
+        ci = {"macro_f1": [0.0, 0.0], "accuracy": [0.0, 0.0]}
+        return {
+            "overall": {"accuracy": 0.0, "macro_f1": 0.0, "ece": 0.0},
+            "per_class": per_class,
+            "confusion": confusion,
+            "ci": ci,
+        }
+
+    confusion = compute_confusion(pred_labels, true_labels, classes)
+    per_class = per_class_metrics(confusion, classes)
+    accuracy = compute_accuracy(confusion)
+    macro = macro_f1(per_class)
+    correct_flags = [truth == pred for truth, pred in zip(true_labels, pred_labels)]
+    ece = expected_calibration_error(confidences, correct_flags) if confidences else 0.0
+
+    macro_ci = bootstrap_ci(
+        _resample_metric_factory(true_labels, pred_labels, classes, "macro_f1")
     )
+    accuracy_ci = bootstrap_ci(
+        _resample_metric_factory(true_labels, pred_labels, classes, "accuracy")
+    )
+
     return {
-        "accuracy": accuracy,
-        "macro_f1": macro_f1,
+        "overall": {"accuracy": accuracy, "macro_f1": macro, "ece": ece},
         "per_class": per_class,
         "confusion": confusion,
-        "coverage": coverage,
-        "ece": ece,
-        "macro_f1_ci": ci,
+        "ci": {"macro_f1": list(macro_ci), "accuracy": list(accuracy_ci)},
     }
-
-
-def _prepare_joined(
-    predictions: pl.DataFrame, labels: pl.DataFrame, id_col: str
-) -> pl.DataFrame:
-    if id_col not in predictions.columns:
-        raise ValueError(f"Predictions missing required id column '{id_col}'")
-    if id_col not in labels.columns:
-        raise ValueError(f"Labels missing required id column '{id_col}'")
-
-    pred_cols = [id_col, "theme"]
-    rename_map = {"theme": "theme_pred"}
-    if "relevance" in predictions.columns:
-        pred_cols.append("relevance")
-        rename_map["relevance"] = "relevance_pred"
-    if "confidence" in predictions.columns:
-        pred_cols.append("confidence")
-        rename_map["confidence"] = "confidence_pred"
-
-    pred_subset = predictions.select([pl.col(col) for col in pred_cols]).rename(
-        rename_map
-    )
-
-    label_cols = [id_col, "theme"]
-    label_rename = {"theme": "theme_true"}
-    if "relevance" in labels.columns:
-        label_cols.append("relevance")
-        label_rename["relevance"] = "relevance_true"
-    label_subset = labels.select(label_cols).rename(label_rename)
-
-    joined = pred_subset.join(label_subset, on=id_col, how="inner")
-    return joined
 
 
 def evaluate_labels(
-    preds_dir: Path,
+    pred_df: pl.DataFrame,
     labels_dir: Path,
-    out_dir: Path,
-    gate_f1: float = DEFAULT_THEME_GATE,
-) -> Dict[str, object]:
-    preds_dir = Path(preds_dir)
-    labels_dir = Path(labels_dir)
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    *,
+    task: str = "theme",
+    threshold: float = 0.5,
+) -> dict[str, object]:
+    """Evaluate predictions for a single source and task against oracle labels."""
 
-    predictions = _load_predictions(preds_dir)
-    label_frames = _load_labels(labels_dir)
-
-    summary_sources: Dict[str, Dict[str, object]] = {}
-    per_class_rows: List[Dict[str, object]] = []
-    confusion_outputs: Dict[str, Dict[str, Dict[str, int]]] = {}
-    overall_true: List[str] = []
-    overall_pred: List[str] = []
-    overall_conf: List[float] = []
-    gates: List[Dict[str, object]] = []
-
-    for source, info in THEME_SOURCES.items():
-        id_col = info["id"]
-        source_preds = predictions.filter(pl.col("source") == source)
-        source_labels = label_frames[source]
-        label_count = source_labels.height
-        if label_count == 0:
-            raise ValueError(f"Label file for {source} is empty")
-
-        if source_preds.height == 0:
-            summary_sources[source] = {
-                "theme": {
-                    "accuracy": 0.0,
-                    "macro_f1": 0.0,
-                    "macro_f1_ci": {"lower": 0.0, "upper": 0.0},
-                    "ece": 0.0,
-                    "coverage": 0.0,
-                }
-            }
-            gates.append(
-                {
-                    "name": f"{source}_theme_macro_f1",
-                    "value": 0.0,
-                    "threshold": gate_f1,
-                    "passed": False,
-                }
-            )
-            gates.append(
-                {
-                    "name": f"{source}_coverage",
-                    "value": 0.0,
-                    "threshold": COVERAGE_GATE,
-                    "passed": False,
-                }
-            )
-            continue
-
-        joined = _prepare_joined(source_preds, source_labels, id_col)
-        coverage = joined.height / label_count if label_count else 0.0
-        classes = _unique_classes(
-            joined["theme_true"].to_list(), joined["theme_pred"].to_list()
-        )
-        theme_confidences = (
-            joined["confidence_pred"].to_list()
-            if "confidence_pred" in joined.columns
-            else (
-                joined["relevance_pred"].to_list()
-                if "relevance_pred" in joined.columns
-                else [1.0] * joined.height
-            )
-        )
-        metrics = _classification_metrics(
-            joined["theme_true"].to_list(),
-            joined["theme_pred"].to_list(),
-            theme_confidences,
-            classes,
-            coverage,
-        )
-        summary_sources[source] = {
-            "theme": {
-                "accuracy": metrics["accuracy"],
-                "macro_f1": metrics["macro_f1"],
-                "macro_f1_ci": metrics["macro_f1_ci"],
-                "ece": metrics["ece"],
-                "coverage": metrics["coverage"],
-            }
-        }
-        confusion_outputs[f"confusion_{source}_theme.json"] = metrics["confusion"]  # type: ignore[assignment]
-        gates.append(
-            {
-                "name": f"{source}_theme_macro_f1",
-                "value": metrics["macro_f1"],
-                "threshold": gate_f1,
-                "passed": metrics["macro_f1"] >= gate_f1,
-            }
-        )
-        gates.append(
-            {
-                "name": f"{source}_coverage",
-                "value": coverage,
-                "threshold": COVERAGE_GATE,
-                "passed": coverage >= COVERAGE_GATE,
-            }
-        )
-
-        for cls, cls_metrics in metrics["per_class"].items():
-            per_class_rows.append(
-                {
-                    "source": source,
-                    "task": "theme",
-                    "class": cls,
-                    **cls_metrics,
-                }
-            )
-
-        overall_true.extend(joined["theme_true"].to_list())
-        overall_pred.extend(joined["theme_pred"].to_list())
-        overall_conf.extend(theme_confidences)
-
-        if (
-            source in {"slack", "email"}
-            and "relevance_true" in joined.columns
-            and "relevance_pred" in joined.columns
-        ):
-            rel_true = [
-                "positive" if float(val) >= 0.5 else "negative"
-                for val in joined["relevance_true"].to_list()
-            ]
-            rel_pred_scores = [
-                max(0.0, min(1.0, float(val)))
-                for val in joined["relevance_pred"].to_list()
-            ]
-            rel_pred = [
-                "positive" if score >= 0.5 else "negative" for score in rel_pred_scores
-            ]
-            rel_classes = _unique_classes(rel_true, rel_pred)
-            rel_metrics = _classification_metrics(
-                rel_true, rel_pred, rel_pred_scores, rel_classes, coverage
-            )
-            summary_sources[source]["relevance"] = {
-                "accuracy": rel_metrics["accuracy"],
-                "macro_f1": rel_metrics["macro_f1"],
-                "macro_f1_ci": rel_metrics["macro_f1_ci"],
-                "ece": rel_metrics["ece"],
-            }
-            confusion_outputs[f"confusion_{source}_relevance.json"] = rel_metrics["confusion"]  # type: ignore[assignment]
-            gates.append(
-                {
-                    "name": f"{source}_relevance_macro_f1",
-                    "value": rel_metrics["macro_f1"],
-                    "threshold": max(gate_f1, RELEVANCE_GATE),
-                    "passed": rel_metrics["macro_f1"] >= max(gate_f1, RELEVANCE_GATE),
-                }
-            )
-            for cls, cls_metrics in rel_metrics["per_class"].items():
-                per_class_rows.append(
-                    {
-                        "source": source,
-                        "task": "relevance",
-                        "class": cls,
-                        **cls_metrics,
-                    }
-                )
-
-    overall_classes = _unique_classes(overall_true, overall_pred)
-    overall_metrics = _classification_metrics(
-        overall_true, overall_pred, overall_conf, overall_classes, 1.0
+    true_labels, pred_labels, confidences, coverage, _ = collect_eval_rows(
+        pred_df, labels_dir, task=task, threshold=threshold
     )
-
-    summary = {
-        "overall": {
-            "accuracy": overall_metrics["accuracy"],
-            "macro_f1": overall_metrics["macro_f1"],
-            "macro_f1_ci": overall_metrics["macro_f1_ci"],
-            "ece": overall_metrics["ece"],
-        },
-        "sources": summary_sources,
-    }
-
-    gates_pass = all(gate["passed"] for gate in gates)
-    summary["gates"] = {gate["name"]: gate for gate in gates}
-    summary["gates_pass"] = gates_pass
-
-    (out_dir / "summary.json").write_text(
-        json.dumps(summary, indent=2), encoding="utf-8"
-    )
-
-    if per_class_rows:
-        pl.DataFrame(per_class_rows).write_csv(out_dir / "per_class.csv")
-
-    for filename, matrix in confusion_outputs.items():
-        (out_dir / filename).write_text(json.dumps(matrix, indent=2), encoding="utf-8")
-
-    return summary
+    metrics = summarize_pairs(true_labels, pred_labels, confidences)
+    metrics.setdefault("overall", {})["coverage"] = coverage
+    return metrics

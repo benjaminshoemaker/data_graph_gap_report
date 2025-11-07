@@ -26,6 +26,7 @@
 
 ## Progress Tracking
 - After writing any code, open `todo.md`, check off all completed items, and call out remaining follow-ups so progress stays traceable between sessions.
+- Treat updating `todo.md` as mandatory: no task is considered finished—or tests “done”—until its checkbox is ticked in that file.
 
 ## Configuration & Secrets
 - Load overrides via `--config`, env vars, or flags in that precedence; keep credentials in `.env` (see `.env.example`) and export `OPENAI_API_KEY` only when running LLM-enabled commands.

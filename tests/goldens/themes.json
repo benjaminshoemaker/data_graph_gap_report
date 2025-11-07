@@ -2,21 +2,43 @@
   "themes": [
     {
       "theme": "data_quality",
-      "score": 0.795,
-      "confidence": 0.804,
-      "summary": "Address missing customer attributes impacting revenue dashboards."
+      "demand": 0.6774,
+      "revenue": 0.0,
+      "severity": 0.0,
+      "recency": 1.0,
+      "score": 0.1694,
+      "confidence": 0.6388,
+      "examples": [
+        {
+          "source": "slack",
+          "text": "Investigated spike in missing customer attributes."
+        },
+        {
+          "source": "slack",
+          "text": "Investigated spike in missing customer attributes."
+        }
+      ],
+      "summary": "Investigated spike in missing customer attributes."
     },
     {
-      "theme": "pipeline_health",
-      "score": 0.7124999999999999,
-      "confidence": 0.7345,
-      "summary": "Stabilize order ingestion pipeline to reduce lag spikes."
-    },
-    {
-      "theme": "governance",
-      "score": 0.59,
-      "confidence": 0.639,
-      "summary": "Improve data contract coverage for marketplace sellers."
+      "theme": "data_gap",
+      "demand": 0.3226,
+      "revenue": 0.0,
+      "severity": 0.0,
+      "recency": 0.023,
+      "score": 0.0806,
+      "confidence": 0.512,
+      "examples": [
+        {
+          "source": "nlq",
+          "text": "What caused the revenue dashboard gap last week?"
+        },
+        {
+          "source": "nlq",
+          "text": "What caused the revenue dashboard gap last week?"
+        }
+      ],
+      "summary": "What caused the revenue dashboard gap last week?"
     }
   ]
 }
