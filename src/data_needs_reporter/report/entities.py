@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from data_needs_reporter.report.llm import LLMClient, LLMError
 from data_needs_reporter.utils.cost_guard import CostGuard
@@ -100,7 +100,9 @@ def _normalize_entities(
     payload: object, allowed_tables: Mapping[str, Sequence[str]]
 ) -> List[Dict[str, object]]:
     if isinstance(payload, Mapping):
-        payload = payload.get("entities") or payload.get("columns") or payload.get("items")
+        payload = (
+            payload.get("entities") or payload.get("columns") or payload.get("items")
+        )
     if not isinstance(payload, list):
         return []
     allowed = {table: set(columns) for table, columns in allowed_tables.items()}
@@ -289,9 +291,9 @@ def extract_entities(
     coverage["overall"] = {
         "messages": float(total_messages),
         "with_entities": float(total_with_entities),
-        "coverage_pct": float(total_with_entities / total_messages)
-        if total_messages
-        else 0.0,
+        "coverage_pct": (
+            float(total_with_entities / total_messages) if total_messages else 0.0
+        ),
     }
 
     return results, coverage

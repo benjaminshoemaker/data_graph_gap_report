@@ -79,9 +79,7 @@ def load_predictions(pred_dir: Path) -> pl.DataFrame:
     if not lazy_frames:
         raise ValueError(f"No prediction frames read from {pred_dir}")
 
-    predictions = pl.concat(lazy_frames, how="vertical_relaxed").collect(
-        streaming=True
-    )
+    predictions = pl.concat(lazy_frames, how="vertical_relaxed").collect(streaming=True)
     if "source" not in predictions.columns:
         raise ValueError("Predictions must include a 'source' column")
     return predictions.with_columns(pl.col("source").str.to_lowercase())
@@ -142,7 +140,9 @@ def collect_eval_rows(
             raise ValueError("Predictions missing 'source' column")
         unique_sources = pred_df.get_column("source").unique().to_list()
         if len(unique_sources) != 1:
-            raise ValueError("pred_df must contain exactly one source when source is omitted")
+            raise ValueError(
+                "pred_df must contain exactly one source when source is omitted"
+            )
         source = str(unique_sources[0])
     source = source.lower()
 
@@ -155,7 +155,9 @@ def collect_eval_rows(
     if task == "theme" and "theme" not in pred_df.columns:
         raise ValueError("Predictions missing 'theme' column for theme evaluation")
     if task == "relevance" and "relevance" not in pred_df.columns:
-        raise ValueError("Predictions missing 'relevance' column for relevance evaluation")
+        raise ValueError(
+            "Predictions missing 'relevance' column for relevance evaluation"
+        )
 
     joined = _prepare_joined(pred_df, labels, info["id"])
     coverage = joined.height / labels.height if labels.height else 0.0
@@ -176,7 +178,10 @@ def collect_eval_rows(
             else []
         )
     elif task == "relevance":
-        if "relevance_true" not in joined.columns or "relevance_pred" not in joined.columns:
+        if (
+            "relevance_true" not in joined.columns
+            or "relevance_pred" not in joined.columns
+        ):
             raise ValueError(f"Relevance columns missing for source '{source}'")
         true_labels = [
             "positive" if float(val) >= threshold else "negative"
@@ -186,7 +191,9 @@ def collect_eval_rows(
             max(0.0, min(1.0, float(val) if val is not None else 0.0))
             for val in joined["relevance_pred"].to_list()
         ]
-        pred_labels = ["positive" if score >= threshold else "negative" for score in pred_scores]
+        pred_labels = [
+            "positive" if score >= threshold else "negative" for score in pred_scores
+        ]
         confidences = pred_scores
     else:
         raise ValueError(f"Unsupported task '{task}'")
@@ -199,8 +206,10 @@ def compute_confusion(
     truths: Sequence[str],
     classes: Sequence[str] | None = None,
 ) -> dict[str, dict[str, int]]:
-    label_set = list(classes) if classes is not None else sorted(
-        {str(val) for val in truths} | {str(val) for val in predictions}
+    label_set = (
+        list(classes)
+        if classes is not None
+        else sorted({str(val) for val in truths} | {str(val) for val in predictions})
     )
     confusion: dict[str, dict[str, int]] = {
         cls: {other: 0 for other in label_set} for cls in label_set
@@ -232,7 +241,11 @@ def per_class_metrics(
         support = tp + fn
         precision = tp / (tp + fp) if (tp + fp) else 0.0
         recall = tp / support if support else 0.0
-        f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0.0
+        f1 = (
+            (2 * precision * recall / (precision + recall))
+            if (precision + recall)
+            else 0.0
+        )
         metrics[cls] = {
             "precision": precision,
             "recall": recall,
@@ -333,7 +346,9 @@ def summarize_pairs(
     confidences: Sequence[float] | None = None,
 ) -> dict[str, object]:
     confidences = list(confidences or [])
-    classes = sorted({str(val) for val in true_labels} | {str(val) for val in pred_labels})
+    classes = sorted(
+        {str(val) for val in true_labels} | {str(val) for val in pred_labels}
+    )
     if not true_labels:
         confusion = {cls: {other: 0 for other in classes} for cls in classes}
         per_class = {

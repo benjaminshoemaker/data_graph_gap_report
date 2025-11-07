@@ -7,7 +7,6 @@ import argparse
 import re
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 INIT_FILE = ROOT / "src" / "data_needs_reporter" / "__init__.py"
 PYPROJECT_FILE = ROOT / "pyproject.toml"

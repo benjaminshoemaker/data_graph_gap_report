@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
-
 DEFAULT_SOURCE_WEIGHTS: Dict[str, float] = {
     "nlq": 0.50,
     "slack": 0.30,
@@ -236,7 +235,9 @@ def compute_source_demand_weights(
         cleaned = dict(DEFAULT_SOURCE_WEIGHTS)
 
     base_total = sum(cleaned.values()) or 1.0
-    normalized_base = {source: weight / base_total for source, weight in cleaned.items()}
+    normalized_base = {
+        source: weight / base_total for source, weight in cleaned.items()
+    }
 
     def _volume_value(source: str) -> float:
         try:
@@ -249,8 +250,7 @@ def compute_source_demand_weights(
         raw = dict(normalized_base)
     else:
         raw = {
-            source: normalized_base[source]
-            * (_volume_value(source) / total_volume)
+            source: normalized_base[source] * (_volume_value(source) / total_volume)
             for source in normalized_base
         }
 
@@ -288,7 +288,10 @@ def compute_score(
     weights: Optional[ScoringWeights] = None,
 ) -> float:
     w = weights or ScoringWeights()
-    clamp = lambda value: max(min(float(value), 1.0), 0.0)
+
+    def clamp(value: object) -> float:
+        return max(min(float(value), 1.0), 0.0)
+
     return (
         w.revenue * clamp(revenue_score)
         + w.demand * clamp(demand_score)

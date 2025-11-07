@@ -24,7 +24,9 @@ def plot_lag_p95_daily(data: Sequence[Mapping], path: Path) -> None:  # noqa: AR
     _copy_static("lag_daily", path)
 
 
-def plot_key_null_pct_daily(data: Sequence[Mapping], path: Path) -> None:  # noqa: ARG001
+def plot_key_null_pct_daily(
+    data: Sequence[Mapping], path: Path
+) -> None:  # noqa: ARG001
     _copy_static("key_null_daily", path)
 
 
@@ -36,7 +38,9 @@ def plot_dup_key_pct_bar(data: Mapping[str, float], path: Path) -> None:  # noqa
     _copy_static("dup_key_bar", path)
 
 
-def plot_theme_demand_monthly(data: Sequence[Mapping], path: Path) -> None:  # noqa: ARG001
+def plot_theme_demand_monthly(
+    data: Sequence[Mapping], path: Path
+) -> None:  # noqa: ARG001
     _copy_static("theme_monthly", path)
 
 

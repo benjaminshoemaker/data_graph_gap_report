@@ -4,10 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from data_needs_reporter.report.entities import (
-    EntityExtractionConfig,
-    extract_entities,
-)
+from data_needs_reporter.report.entities import EntityExtractionConfig, extract_entities
 from data_needs_reporter.report.llm import MockProvider, RepairingLLMClient
 
 
@@ -23,21 +20,35 @@ class SequenceProvider(MockProvider):
         return response
 
 
-def test_extract_entities_enforces_caps(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_extract_entities_enforces_caps(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     pytest.importorskip("polars")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     responses = [
         {
             "content": {
                 "entities": [
-                    {"table": "DIM_CUSTOMER", "column": "CUSTOMER_ID", "confidence": 1.2},
-                    {"table": "dim_customer", "column": "customer_id", "confidence": 0.6},
+                    {
+                        "table": "DIM_CUSTOMER",
+                        "column": "CUSTOMER_ID",
+                        "confidence": 1.2,
+                    },
+                    {
+                        "table": "dim_customer",
+                        "column": "customer_id",
+                        "confidence": 0.6,
+                    },
                     {"table": "fact_orders", "column": "order_id", "confidence": 0.9},
                     {"table": "fact_orders", "column": "amount", "confidence": 0.8},
                     {"table": "unknown_table", "column": "foo", "confidence": 0.7},
                     {"table": "dim_customer", "column": "email", "confidence": 0.5},
                     {"table": "dim_customer", "column": "plan_id", "confidence": 0.4},
-                    {"table": "fact_orders", "column": "customer_id", "confidence": 0.65},
+                    {
+                        "table": "fact_orders",
+                        "column": "customer_id",
+                        "confidence": 0.65,
+                    },
                     {"table": "fact_orders", "column": "status", "confidence": -0.1},
                     {"table": "fact_orders", "column": "amount", "confidence": 0.2},
                     {"table": "dim_customer", "column": "extra1", "confidence": 0.9},
@@ -61,8 +72,18 @@ def test_extract_entities_enforces_caps(monkeypatch: pytest.MonkeyPatch, tmp_pat
         "fact_orders": ["order_id", "amount", "customer_id", "status"],
     }
     records = [
-        {"source": "slack", "record_id": 1, "message_id": 1, "body": "Need revenue tables"},
-        {"source": "email", "record_id": 2, "message_id": 2, "body": "Follow-up thread"},
+        {
+            "source": "slack",
+            "record_id": 1,
+            "message_id": 1,
+            "body": "Need revenue tables",
+        },
+        {
+            "source": "email",
+            "record_id": 2,
+            "message_id": 2,
+            "body": "Follow-up thread",
+        },
     ]
     out_path = tmp_path / "entities.parquet"
     rows, coverage = extract_entities(

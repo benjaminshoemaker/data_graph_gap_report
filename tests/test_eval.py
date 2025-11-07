@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 import polars as pl
+import pytest
 from typer.testing import CliRunner
 
 from data_needs_reporter.cli import app

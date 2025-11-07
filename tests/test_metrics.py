@@ -9,12 +9,7 @@ import polars as pl
 import pytest
 from typer.testing import CliRunner
 
-from data_needs_reporter.config import DEFAULT_CONFIG_PATH, load_config
-from data_needs_reporter.generate.defects import apply_typical_neobank_defects
-from data_needs_reporter.generate.warehouse import (
-    generate_neobank_dims,
-    generate_neobank_facts,
-)
+from data_needs_reporter.cli import app
 from data_needs_reporter.report.metrics import (
     compute_data_health,
     validate_monetization_targets,
@@ -25,18 +20,17 @@ from data_needs_reporter.report.scoring import (
     compute_confidence,
     compute_marketplace_revenue_risk,
     compute_neobank_revenue_risk,
-    compute_source_demand_weights,
     compute_score,
     compute_severity,
+    compute_source_demand_weights,
     compute_weighted_theme_shares,
     normalize_revenue,
     post_stratified_item_weights,
-    select_top_actions,
     recency_decay,
     reweight_source_weights,
+    select_top_actions,
     trailing_monthly_revenue_median,
 )
-from data_needs_reporter.cli import app
 
 _helpers_spec = importlib.util.spec_from_file_location(
     "_test_cli_helpers", Path(__file__).resolve().parent / "test_cli.py"
@@ -214,7 +208,9 @@ def test_reweight_source_weights_clamps_extremes():
 def test_compute_source_demand_weights_scales_with_volume():
     base = {"nlq": 0.5, "slack": 0.3, "email": 0.2}
     volumes = {"nlq": 900, "slack": 80, "email": 20}
-    weights = compute_source_demand_weights(base, volumes, min_weight=0.15, max_weight=0.60)
+    weights = compute_source_demand_weights(
+        base, volumes, min_weight=0.15, max_weight=0.60
+    )
     assert sum(weights.values()) == pytest.approx(1.0)
     assert weights["nlq"] == pytest.approx(0.60, abs=1e-6)
     for source_weight in weights.values():
@@ -224,7 +220,9 @@ def test_compute_source_demand_weights_scales_with_volume():
 def test_compute_source_demand_weights_handles_zero_volume():
     base = {"nlq": 0.4, "slack": 0.4, "email": 0.2}
     volumes = {"nlq": 0, "slack": 0, "email": 0}
-    weights = compute_source_demand_weights(base, volumes, min_weight=0.1, max_weight=0.7)
+    weights = compute_source_demand_weights(
+        base, volumes, min_weight=0.1, max_weight=0.7
+    )
     assert weights["nlq"] == pytest.approx(0.4, abs=1e-6)
     assert weights["slack"] == pytest.approx(0.4, abs=1e-6)
     assert weights["email"] == pytest.approx(0.2, abs=1e-6)
@@ -467,7 +465,6 @@ def test_marketplace_revenue_risk() -> None:
     assert result["revenue_risk_ratio"] == pytest.approx(1.0, rel=1e-6)
 
 
-
 def test_compute_data_health_synthetic(tmp_path: Path) -> None:
     polars = pytest.importorskip("polars")
     tz = "UTC"
@@ -488,9 +485,7 @@ def test_compute_data_health_synthetic(tmp_path: Path) -> None:
         }
     ).write_parquet(tmp_path / "dim_merchant.parquet")
 
-    polars.DataFrame({"card_id": [10, 20]}).write_parquet(
-        tmp_path / "dim_card.parquet"
-    )
+    polars.DataFrame({"card_id": [10, 20]}).write_parquet(tmp_path / "dim_card.parquet")
 
     polars.DataFrame(
         {
@@ -551,9 +546,7 @@ def test_compute_data_health_synthetic(tmp_path: Path) -> None:
         (m.get("row_count", 0) or 0) * (m.get("dup_key_pct", 0.0) or 0.0) / 100.0
         for m in tables.values()
     )
-    expected_key_null_pct = (
-        (key_null_rows / total_rows) * 100.0 if total_rows else 0.0
-    )
+    expected_key_null_pct = (key_null_rows / total_rows) * 100.0 if total_rows else 0.0
     expected_dup_pct = (dup_rows / total_rows) * 100.0 if total_rows else 0.0
 
     assert aggregates["key_null_pct"] == pytest.approx(expected_key_null_pct, rel=1e-6)
@@ -577,7 +570,9 @@ def test_validate_enforces_slos(tmp_path: Path) -> None:
         _write_minimal_comms(comms)
 
         report_dir = Path("reports") / "neobank"
-        payload = json.loads((report_dir / "data_health.json").read_text(encoding="utf-8"))
+        payload = json.loads(
+            (report_dir / "data_health.json").read_text(encoding="utf-8")
+        )
         aggregates = payload.setdefault("aggregates", {})
         aggregates.update(
             {

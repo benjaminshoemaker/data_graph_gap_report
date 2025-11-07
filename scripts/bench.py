@@ -145,7 +145,9 @@ def _rss_to_mb(raw: int | None) -> float | None:
     return bytes_used / (1024 * 1024)
 
 
-def _run_with_metrics(command: Sequence[str], cwd: Path) -> tuple[int, float, float | None]:
+def _run_with_metrics(
+    command: Sequence[str], cwd: Path
+) -> tuple[int, float, float | None]:
     env = os.environ.copy()
     start = time.perf_counter()
     peak_rss: float | None = None
@@ -195,12 +197,26 @@ def _build_commands(
     commands: List[BenchCommand] = [
         BenchCommand(
             "gen-warehouse",
-            [*base_flags, "gen-warehouse", "--archetype", "neobank", "--out", str(warehouse_dir)],
+            [
+                *base_flags,
+                "gen-warehouse",
+                "--archetype",
+                "neobank",
+                "--out",
+                str(warehouse_dir),
+            ],
             COMMAND_TARGETS["gen-warehouse"],
         ),
         BenchCommand(
             "gen-comms",
-            [*base_flags, "gen-comms", "--archetype", "neobank", "--out", str(comms_dir)],
+            [
+                *base_flags,
+                "gen-comms",
+                "--archetype",
+                "neobank",
+                "--out",
+                str(comms_dir),
+            ],
             COMMAND_TARGETS["gen-comms"],
         ),
         BenchCommand(
@@ -266,7 +282,9 @@ def _summarize_results(results: List[BenchResult]) -> Dict[str, Any]:
             {
                 "name": item.name,
                 "elapsed_s": round(item.elapsed_s, 4),
-                "peak_rss_mb": round(item.peak_rss_mb, 2) if item.peak_rss_mb is not None else None,
+                "peak_rss_mb": (
+                    round(item.peak_rss_mb, 2) if item.peak_rss_mb is not None else None
+                ),
                 "target_s": item.target_s,
                 "exit_code": item.exit_code,
                 "within_budget": item.within_budget,
@@ -275,11 +293,9 @@ def _summarize_results(results: List[BenchResult]) -> Dict[str, Any]:
         ],
         "all_within_budget": all(item.within_budget for item in results),
         "completed_commands": len(results),
-        "max_peak_rss_mb": max(
-            (item.peak_rss_mb or 0.0) for item in results
-        )
-        if results
-        else 0.0,
+        "max_peak_rss_mb": (
+            max((item.peak_rss_mb or 0.0) for item in results) if results else 0.0
+        ),
         "total_elapsed_s": round(sum(item.elapsed_s for item in results), 4),
         "platform": platform.platform(),
     }
