@@ -11,7 +11,7 @@ import pytest
 
 @pytest.mark.performance
 @pytest.mark.skipif(
-    os.environ.get("CI"),
+    bool(os.environ.get("CI")),
     reason="Performance budgets are informational in CI.",
 )
 def test_perf_benchmarks_respect_budgets(tmp_path: Path) -> None:

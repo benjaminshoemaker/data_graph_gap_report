@@ -29,7 +29,6 @@ def _install_editable(python_bin: Path, env: dict[str, str]) -> None:
             "-m",
             "pip",
             "install",
-            "--no-build-isolation",
             "--no-deps",
             "-e",
             str(PROJECT_ROOT),
@@ -47,7 +46,6 @@ def test_cli_entrypoint(tmp_path: Path) -> None:
     dnr_bin = scripts_dir / ("dnr.exe" if os.name == "nt" else "dnr")
 
     env = os.environ.copy()
-    env.setdefault("PIP_NO_BUILD_ISOLATION", "1")
     host_paths = _host_site_packages()
     if host_paths:
         existing = env.get("PYTHONPATH")
