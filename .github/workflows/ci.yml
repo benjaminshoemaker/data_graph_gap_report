@@ -164,6 +164,12 @@ jobs:
           else
             echo "bench.json missing"
           fi
+      - name: Upload Artifact: bench.json
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-summary
+          path: bench.json
       - name: Summarize benchmarks
         if: always()
         run: |
@@ -198,3 +204,9 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
               fh.write("\n".join(lines) + "\n")
           PY
+      - name: Job Summary: bench
+        if: always()
+        run: |
+          if [[ -f bench.json ]]; then
+            python scripts/bench.py --report-file bench.json --markdown-summary >> "$GITHUB_STEP_SUMMARY"
+          fi
