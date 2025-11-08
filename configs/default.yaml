@@ -71,6 +71,15 @@
         "values": {}
       }
     },
+    "invoice_aggregates": {
+      "enabled": false,
+      "slos": {
+        "max_missing_pct": 5.0,
+        "min_on_time_pct": 90.0,
+        "max_dup_key_pct": 1.0,
+        "max_p95_payment_lag_min": 240.0
+      }
+    },
     "monetization": {
       "attach_targets": {}
     }

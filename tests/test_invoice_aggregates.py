@@ -78,9 +78,10 @@ def _write_invoice_config(path: Path) -> None:
             "invoice_aggregates": {
                 "enabled": True,
                 "slos": {
-                    "key_null_pct": 1.0,
-                    "dup_key_pct": 0.5,
-                    "p95_ingest_lag_min": 150.0,
+                    "max_missing_pct": 5.0,
+                    "min_on_time_pct": 90.0,
+                    "max_dup_key_pct": 1.0,
+                    "max_p95_payment_lag_min": 240.0,
                 },
             },
         },
@@ -174,7 +175,10 @@ def test_invoice_aggregates_checks(tmp_path: Path) -> None:
         )
         agg_tables = payload.get("aggregates_by_table", {})
         assert isinstance(agg_tables, dict)
-        assert "fact_subscription_invoice" in agg_tables
+        invoice_aggs = agg_tables.get("fact_subscription_invoice")
+        assert isinstance(invoice_aggs, Mapping)
+        for key in ("missing_pct", "on_time_pct", "dup_key_pct", "p95_payment_lag_min"):
+            assert key in invoice_aggs
 
         qc_dir = reports_dir / "qc"
         validate_run = runner.invoke(
@@ -205,3 +209,74 @@ def test_invoice_aggregates_checks(tmp_path: Path) -> None:
             if isinstance(name, str) and name.startswith("slo.invoice_aggregates.")
         ]
         assert invoice_checks, "Expected invoice aggregate SLO checks to be present."
+
+        exec_payload = json.loads(
+            (reports_dir / "exec_summary.json").read_text(encoding="utf-8")
+        )
+        invoice_summary = exec_payload.get("invoice_aggregates")
+        assert isinstance(invoice_summary, Mapping)
+        assert invoice_summary.get("metrics")
+
+
+def test_invoice_aggregates_fail_on_threshold(tmp_path: Path) -> None:
+    pytest.importorskip("polars")
+
+    with runner.isolated_filesystem():
+        warehouse = Path("warehouse")
+        comms = Path("comms")
+        reports_dir = Path("reports") / "neobank"
+        qc_dir = reports_dir / "qc"
+        Path("meta").mkdir(parents=True, exist_ok=True)
+
+        _write_invoice_warehouse(warehouse)
+        _write_minimal_comms(comms)
+
+        config_path = Path("test_config.json")
+        _write_invoice_config(config_path)
+        config_data = json.loads(config_path.read_text(encoding="utf-8"))
+        config_data["report"]["invoice_aggregates"]["slos"]["min_on_time_pct"] = 110.0
+        config_path.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
+
+        run_report = runner.invoke(
+            app,
+            [
+                "--config",
+                str(config_path),
+                "run-report",
+                "--warehouse",
+                str(warehouse),
+                "--comms",
+                str(comms),
+                "--out",
+                str(reports_dir),
+            ],
+        )
+        assert run_report.exit_code == 0, run_report.stdout
+
+        validate_run = runner.invoke(
+            app,
+            [
+                "--config",
+                str(config_path),
+                "validate",
+                "--warehouse",
+                str(warehouse),
+                "--comms",
+                str(comms),
+                "--out",
+                str(qc_dir),
+                "--strict",
+            ],
+        )
+        assert validate_run.exit_code != 0
+
+        summary = json.loads((qc_dir / "qc_summary.json").read_text(encoding="utf-8"))
+        assert not summary.get("passed")
+        failing_checks = {
+            check.get("name"): check
+            for check in summary.get("checks", [])
+            if isinstance(check, Mapping) and not check.get("passed")
+        }
+        assert (
+            "slo.invoice_aggregates.min_on_time_pct" in failing_checks
+        ), failing_checks.keys()
