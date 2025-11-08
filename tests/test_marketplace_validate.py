@@ -231,6 +231,37 @@ def test_category_caps_fail(tmp_path: Path) -> None:
     assert "exceeds cap" in result["detail"]
 
 
+def test_category_caps_child_path_pass(tmp_path: Path) -> None:
+    warehouse = tmp_path / "caps_child_pass"
+    _write_marketplace_category_fixture(
+        warehouse,
+        {1: 50_000, 2: 30_000, 3: 20_000},
+        use_child_categories=True,
+    )
+    result = validate_marketplace_category_caps(
+        warehouse,
+        category_caps={"Home/Home Decor": 0.6},
+        rollup_to_parent=True,
+    )
+    assert result["passed"] is True
+
+
+def test_category_caps_child_path_fail(tmp_path: Path) -> None:
+    warehouse = tmp_path / "caps_child_fail"
+    _write_marketplace_category_fixture(
+        warehouse,
+        {1: 70_000, 2: 20_000, 3: 10_000},
+        use_child_categories=True,
+    )
+    result = validate_marketplace_category_caps(
+        warehouse,
+        category_caps={"Home/Home Decor": 0.5},
+        rollup_to_parent=True,
+    )
+    assert result["passed"] is False
+    assert "Home/Home Decor" in result["detail"]
+
+
 def test_category_caps_rollup_toggle(tmp_path: Path) -> None:
     warehouse = tmp_path / "caps_rollup"
     _write_marketplace_category_fixture(
