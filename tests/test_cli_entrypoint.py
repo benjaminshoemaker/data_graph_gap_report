@@ -14,9 +14,20 @@ def _scripts_dir(venv_dir: Path) -> Path:
 
 
 def _ensure_modern_pip(python_bin: Path, env: dict[str, str]) -> None:
-    """Upgrade pip so editable installs support pyproject builds."""
+    """Upgrade packaging tools so editable installs support pyproject builds."""
+    if os.environ.get("CODEX_SANDBOX_NETWORK_DISABLED") == "1":
+        return
     subprocess.run(
-        [str(python_bin), "-m", "pip", "install", "--upgrade", "pip"],
+        [
+            str(python_bin),
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "pip",
+            "setuptools",
+            "wheel",
+        ],
         check=True,
         env=env,
     )
