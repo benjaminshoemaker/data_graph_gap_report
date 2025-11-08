@@ -224,6 +224,128 @@ def compute_evening_window_share(
     return metrics
 
 
+def compute_weighted_gmv_share(
+    gmv_df: "pl.DataFrame",
+    *,
+    caps: Mapping[str, float],
+    rollup_to_parent: bool = False,
+) -> Dict[str, object]:
+    polars = _require_polars()
+    if gmv_df.height == 0:
+        return {
+            "resolved": {},
+            "issues": ["Order item GMV unavailable for category caps validation."],
+        }
+
+    aggregated = (
+        gmv_df.group_by(
+            [
+                "leaf_category_id",
+                "leaf_category_name",
+                "leaf_category_path",
+                "top_category_id",
+                "top_category_name",
+            ]
+        )
+        .agg(polars.col("gmv_cents").sum().alias("gmv_cents"))
+        .with_columns(polars.col("gmv_cents").cast(polars.Float64))
+    )
+
+    total_gmv = float(aggregated["gmv_cents"].sum() or 0.0)
+    if total_gmv <= 0.0:
+        return {
+            "resolved": {},
+            "issues": ["Total GMV is zero; cannot validate category caps."],
+        }
+
+    aggregated = aggregated.with_columns(
+        (polars.col("gmv_cents") / polars.lit(total_gmv)).alias("share")
+    )
+    leaf_records = aggregated.to_dicts()
+
+    leaf_share: Dict[int, float] = {}
+    parent_share: Dict[int, float] = {}
+    leaf_name_index: Dict[str, int] = {}
+    parent_name_index: Dict[str, int] = {}
+    leaf_display_map: Dict[int, str] = {}
+    parent_display_map: Dict[int, str] = {}
+    path_map: Dict[int, str] = {}
+    path_index: Dict[str, int] = {}
+    parent_lookup: Dict[int, int] = {}
+
+    for record in leaf_records:
+        leaf_id = int(record["leaf_category_id"])
+        top_id = int(record["top_category_id"])
+        share = float(record["share"] or 0.0)
+        leaf_share[leaf_id] = share
+        parent_share[top_id] = parent_share.get(top_id, 0.0) + share
+        leaf_name = str(record["leaf_category_name"] or f"category_{leaf_id}")
+        top_name = str(record["top_category_name"] or f"category_{top_id}")
+        path = str(record["leaf_category_path"] or leaf_name)
+
+        leaf_name_index.setdefault(leaf_name.strip().lower(), leaf_id)
+        parent_name_index.setdefault(top_name.strip().lower(), top_id)
+        path_lower = path.strip().lower()
+        path_map[leaf_id] = path
+        path_index.setdefault(path_lower, leaf_id)
+        parent_lookup[leaf_id] = top_id
+        leaf_display_map[leaf_id] = path
+        parent_display_map[top_id] = top_name
+
+    resolved: Dict[str, Dict[str, Optional[float]]] = {}
+    issues: List[str] = []
+
+    def resolve_key(raw_key: str) -> Tuple[Optional[float], str]:
+        text = str(raw_key).strip()
+        lowered = text.lower()
+
+        if "/" in lowered:
+            leaf_id = path_index.get(lowered)
+            if leaf_id is not None:
+                share = leaf_share.get(leaf_id)
+                return share, leaf_display_map.get(leaf_id, text)
+            numeric_parts = [part.strip() for part in text.split("/")]
+            if len(numeric_parts) == 2 and all(
+                part.isdigit() for part in numeric_parts
+            ):
+                parent_id, leaf_id = map(int, numeric_parts)
+                if leaf_id in leaf_share and parent_lookup.get(leaf_id) == parent_id:
+                    return leaf_share.get(leaf_id), leaf_display_map.get(leaf_id, text)
+            return None, text
+
+        if text.isdigit():
+            cat_id = int(text)
+            if cat_id in leaf_share:
+                return leaf_share.get(cat_id), leaf_display_map.get(cat_id, text)
+            if cat_id in parent_share:
+                return parent_share.get(cat_id), parent_display_map.get(cat_id, text)
+
+        if rollup_to_parent:
+            parent_id = parent_name_index.get(lowered)
+            if parent_id is not None:
+                return parent_share.get(parent_id), parent_display_map.get(
+                    parent_id, text
+                )
+
+        leaf_id = leaf_name_index.get(lowered)
+        if leaf_id is not None:
+            return leaf_share.get(leaf_id), path_map.get(leaf_id, text)
+
+        parent_id = parent_name_index.get(lowered)
+        if parent_id is not None:
+            return parent_share.get(parent_id), parent_display_map.get(parent_id, text)
+
+        return None, text
+
+    for raw_key in caps.keys():
+        share, display = resolve_key(raw_key)
+        resolved[str(raw_key)] = {"share": share, "display": display}
+        if share is None:
+            issues.append(f"Unknown category specified in caps: {raw_key!r}.")
+
+    return {"resolved": resolved, "issues": issues}
+
+
 def resolve_invoice_slo(metric_name: str) -> Tuple[str, str]:
     lowered = metric_name.lower()
     if lowered.startswith("min_"):
@@ -1294,53 +1416,111 @@ def validate_marketplace_category_caps(
             )
     mapping_df = polars.DataFrame(mapping_rows) if mapping_rows else None
 
+    path_cache: Dict[int, str] = {}
+
+    def resolve_path(category_id: int) -> str:
+        if category_id in path_cache:
+            return path_cache[category_id]
+        name = name_map.get(category_id, f"category_{category_id}")
+        parent = parent_map.get(category_id)
+        if parent is None:
+            path_cache[category_id] = name
+            return name
+        parent_path = resolve_path(parent)
+        path_cache[category_id] = f"{parent_path}/{name}"
+        return path_cache[category_id]
+
+    category_index_rows = []
+    for cat_id in category_ids:
+        top_id = resolve_top(cat_id) or cat_id
+        category_index_rows.append(
+            {
+                "leaf_category_id": cat_id,
+                "leaf_category_name": name_map.get(cat_id, f"category_{cat_id}"),
+                "leaf_category_path": resolve_path(cat_id),
+                "top_category_id": top_id,
+                "top_category_name": name_map.get(top_id, f"category_{top_id}"),
+            }
+        )
+    category_index_df = polars.DataFrame(category_index_rows)
+
     listings_enriched = listings.select(
         [
             polars.col("listing_id").cast(polars.Int64),
-            polars.col("category_id").cast(polars.Int64),
+            polars.col("category_id").cast(polars.Int64).alias("leaf_category_id"),
         ]
-    )
-    if mapping_df is not None:
-        listings_enriched = listings_enriched.join(
-            mapping_df, on="category_id", how="left"
-        )
-    else:
-        listings_enriched = listings_enriched.with_columns(
-            polars.col("category_id").alias("group_category_id")
-        )
-
-    order_items_enriched = order_items.select(
-        [
-            polars.col("order_id").cast(polars.Int64),
-            polars.col("listing_id").cast(polars.Int64),
-            polars.col("qty").cast(polars.Float64),
-            polars.col("item_price_cents").cast(polars.Float64),
-        ]
-    ).join(listings_enriched, on="listing_id", how="left")
+    ).join(category_index_df, on="leaf_category_id", how="left")
 
     missing_group_categories = (
-        order_items_enriched.filter(polars.col("group_category_id").is_null())
+        listings_enriched.filter(polars.col("leaf_category_name").is_null())
         .select("listing_id")
         .to_series()
         .drop_nulls()
         .to_list()
     )
 
+    listings_enriched = listings_enriched.with_columns(
+        [
+            polars.col("top_category_id")
+            .fill_null(polars.col("leaf_category_id"))
+            .alias("top_category_id"),
+            polars.col("leaf_category_id")
+            .fill_null(polars.col("top_category_id"))
+            .alias("leaf_category_id"),
+            polars.col("leaf_category_name")
+            .fill_null(polars.col("top_category_name"))
+            .alias("leaf_category_name"),
+            polars.col("leaf_category_path")
+            .fill_null(polars.col("top_category_name"))
+            .alias("leaf_category_path"),
+        ]
+    )
+
+    order_items_enriched = (
+        order_items.select(
+            [
+                polars.col("order_id").cast(polars.Int64),
+                polars.col("listing_id").cast(polars.Int64),
+                polars.col("qty").cast(polars.Float64),
+                polars.col("item_price_cents").cast(polars.Float64),
+            ]
+        )
+        .join(listings_enriched, on="listing_id", how="left")
+        .with_columns(
+            [
+                polars.col("leaf_category_id")
+                .fill_null(polars.col("top_category_id"))
+                .alias("leaf_category_id"),
+                polars.col("leaf_category_name")
+                .fill_null(polars.col("top_category_name"))
+                .alias("leaf_category_name"),
+                polars.col("leaf_category_path")
+                .fill_null(polars.col("top_category_name"))
+                .alias("leaf_category_path"),
+            ]
+        )
+    )
+
     order_items_enriched = order_items_enriched.filter(
-        polars.col("group_category_id").is_not_null()
+        polars.col("leaf_category_id").is_not_null()
     )
 
     order_items_enriched = order_items_enriched.with_columns(
         (polars.col("qty") * polars.col("item_price_cents")).alias("gmv_cents")
     )
 
-    gmv_by_category = (
-        order_items_enriched.group_by("group_category_id")
-        .agg(polars.col("gmv_cents").sum().alias("gmv_cents"))
-        .sort("group_category_id")
-    )
+    gmv_detail = order_items_enriched.select(
+        [
+            polars.col("leaf_category_id"),
+            polars.col("leaf_category_name"),
+            polars.col("leaf_category_path"),
+            polars.col("top_category_id"),
+            polars.col("top_category_name"),
+            polars.col("gmv_cents"),
+        ]
+    ).drop_nulls(["leaf_category_id", "top_category_id"])
 
-    if gmv_by_category.height == 0:
+    if gmv_detail.height == 0:
         detail = "Order item GMV unavailable for category caps validation."
         issues = []
         if missing_group_categories:
@@ -1351,49 +1531,10 @@ def validate_marketplace_category_caps(
         issues.append(detail)
         return {"passed": False, "issues": issues, "detail": detail}
 
-    total_gmv = float(gmv_by_category["gmv_cents"].sum())
+    total_gmv = float(gmv_detail["gmv_cents"].sum())
     if total_gmv <= 0:
         detail = "Total GMV is zero; cannot validate category caps."
         return {"passed": False, "issues": [detail], "detail": detail}
-
-    if rollup_to_parent:
-        group_name_pairs = [
-            (cat_id, name_map.get(cat_id, f"category_{cat_id}"))
-            for cat_id, parent in parent_map.items()
-            if parent is None
-        ]
-    else:
-        group_name_pairs = [
-            (cat_id, name_map.get(cat_id, f"category_{cat_id}"))
-            for cat_id in category_ids
-        ]
-    name_df = polars.DataFrame(
-        {
-            "group_category_id": [pair[0] for pair in group_name_pairs],
-            "group_category_name": [pair[1] for pair in group_name_pairs],
-        }
-    )
-
-    gmv_by_category = gmv_by_category.join(
-        name_df, on="group_category_id", how="left"
-    ).with_columns((polars.col("gmv_cents") / polars.lit(total_gmv)).alias("share"))
-
-    share_map: Dict[int, float] = {
-        int(cat_id): float(share)
-        for cat_id, share in zip(
-            gmv_by_category["group_category_id"].to_list(),
-            gmv_by_category["share"].to_list(),
-        )
-    }
-    group_name_map = {
-        int(cat_id): (
-            name if name is not None else name_map.get(int(cat_id), str(cat_id))
-        )
-        for cat_id, name in zip(
-            gmv_by_category["group_category_id"].to_list(),
-            gmv_by_category["group_category_name"].to_list(),
-        )
-    }
 
     issues: List[str] = []
     if missing_group_categories:
@@ -1402,7 +1543,7 @@ def validate_marketplace_category_caps(
             + ", ".join(str(int(val)) for val in missing_group_categories)
         )
 
-    normalized_caps: Dict[int, float] = {}
+    normalized_caps: Dict[str, float] = {}
     for key, raw_limit in caps.items():
         try:
             limit = float(raw_limit)
@@ -1411,40 +1552,39 @@ def validate_marketplace_category_caps(
             continue
         if limit > 1.0:
             limit = limit / 100.0
-        matched_id: Optional[int] = None
-        lowered_key = str(key).lower()
-        for cat_id, name in group_name_map.items():
-            if str(cat_id) == str(key):
-                matched_id = cat_id
-                break
-            if name and name.lower() == lowered_key:
-                matched_id = cat_id
-                break
-        if matched_id is None:
-            issues.append(f"Unknown category specified in caps: {key!r}.")
-            continue
-        normalized_caps[matched_id] = limit
+        normalized_caps[str(key)] = limit
 
-    for cat_id, limit in normalized_caps.items():
-        share = share_map.get(cat_id, 0.0)
+    share_summary = compute_weighted_gmv_share(
+        gmv_detail,
+        caps=normalized_caps,
+        rollup_to_parent=rollup_to_parent,
+    )
+
+    issues.extend(share_summary["issues"])
+    resolved = share_summary["resolved"]
+
+    detail_parts: List[str] = []
+    for raw_key, limit in normalized_caps.items():
+        entry = resolved.get(raw_key)
+        share = entry.get("share") if entry else None
+        display_name = entry.get("display") if entry else str(raw_key)
+        if share is None:
+            issues.append(f"Unknown category specified in caps: {raw_key!r}.")
+            continue
         if share > limit + 1e-9:
-            name = group_name_map.get(cat_id, str(cat_id))
             issues.append(
-                f"Category {name} share {share * 100:.1f}% exceeds cap {limit * 100:.1f}%."
+                f"Category {display_name} share {share * 100:.1f}% exceeds cap {limit * 100:.1f}%."
             )
+        detail_parts.append(
+            f"{display_name}={share * 100:.1f}% (cap {limit * 100:.1f}%)"
+        )
 
     passed = not issues
     if passed:
-        detail_parts = []
-        for cat_id, limit in normalized_caps.items():
-            name = group_name_map.get(cat_id, str(cat_id))
-            share_pct = share_map.get(cat_id, 0.0) * 100.0
-            detail_parts.append(f"{name}={share_pct:.1f}% (cap {limit * 100:.1f}%)")
-        detail = (
-            "Category caps satisfied (" + ", ".join(detail_parts) + ")."
-            if detail_parts
-            else "Category caps satisfied."
-        )
+        if detail_parts:
+            detail = "Category caps satisfied (" + ", ".join(detail_parts) + ")."
+        else:
+            detail = "Category caps satisfied."
     else:
         detail = "; ".join(issues)
 
@@ -3465,6 +3605,7 @@ __all__ = [
     "compute_data_health",
     "compute_invoice_aggregates",
     "compute_evening_window_share",
+    "compute_weighted_gmv_share",
     "validate_warehouse_schema",
     "validate_volume_targets",
     "validate_quality_targets",
