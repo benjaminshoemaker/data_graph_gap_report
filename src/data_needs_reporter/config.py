@@ -63,10 +63,10 @@ class ReportSLOs(BaseModel):
 
 
 class InvoiceAggregatesSLOs(BaseModel):
-    key_null_pct: Optional[float] = None
-    dup_key_pct: Optional[float] = None
-    p95_ingest_lag_min: Optional[float] = None
-    fk_success_pct: Optional[float] = None
+    max_missing_pct: Optional[float] = None
+    min_on_time_pct: Optional[float] = None
+    max_dup_key_pct: Optional[float] = None
+    max_p95_payment_lag_min: Optional[float] = None
 
 
 class MarketplaceEveningWindowConfig(BaseModel):

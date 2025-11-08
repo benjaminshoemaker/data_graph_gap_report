@@ -34,6 +34,7 @@ from data_needs_reporter.generate.warehouse import (
 from data_needs_reporter.report.llm import MockProvider, RepairingLLMClient
 from data_needs_reporter.report.metrics import (
     TABLE_METRIC_SPECS,
+    lookup_invoice_metric_value,
     validate_comms_targets,
     validate_event_correlation,
     validate_marketplace_category_caps,
@@ -1002,8 +1003,10 @@ def validate_cmd(
         return None
 
     def _format_value(metric_name: str, value: float) -> str:
-        if metric_name == "p95_ingest_lag_min":
+        if metric_name.endswith("_min") or metric_name.endswith("_minutes"):
             return f"{value:.2f} min"
+        if metric_name.endswith("_count") or metric_name == "row_count":
+            return f"{value:.0f}"
         return f"{value:.2f}%"
 
     data_health_path = out_dir.parent / "data_health.json"
@@ -1112,41 +1115,56 @@ def validate_cmd(
             invoice_aggs_enabled = bool(invoice_cfg_raw.get("enabled"))
             invoice_slos_cfg = invoice_cfg_raw.get("slos")
 
-    invoice_aggregate_thresholds: Mapping[str, float] = slo_thresholds
+    invoice_aggregate_thresholds: Dict[str, float] = {}
     if invoice_slos_cfg is not None:
         if hasattr(invoice_slos_cfg, "model_dump"):
-            overrides = invoice_slos_cfg.model_dump(exclude_none=True)
+            raw_slos = invoice_slos_cfg.model_dump(exclude_none=True)
         elif isinstance(invoice_slos_cfg, Mapping):
-            overrides = {k: v for k, v in invoice_slos_cfg.items() if v is not None}
+            raw_slos = {k: v for k, v in invoice_slos_cfg.items() if v is not None}
         else:
-            overrides = {}
-        if overrides:
-            merged = dict(slo_thresholds)
-            for key, value in overrides.items():
-                try:
-                    merged[key] = float(value)
-                except (TypeError, ValueError):
-                    continue
-            invoice_aggregate_thresholds = merged
+            raw_slos = {}
+        for key, value in raw_slos.items():
+            try:
+                invoice_aggregate_thresholds[key] = float(value)
+            except (TypeError, ValueError):
+                continue
+    elif invoice_aggs_enabled:
+        for key, value in slo_thresholds.items():
+            try:
+                invoice_aggregate_thresholds[key] = float(value)
+            except (TypeError, ValueError):
+                continue
 
-    if invoice_aggs_enabled and invoice_aggregate_metrics is not None:
+    if (
+        invoice_aggs_enabled
+        and invoice_aggregate_metrics is not None
+        and invoice_aggregate_thresholds
+    ):
         for metric_name, threshold_raw in invoice_aggregate_thresholds.items():
             try:
                 threshold = float(threshold_raw)
             except (TypeError, ValueError):
                 continue
-            agg_value = _extract_metric(invoice_aggregate_metrics, metric_name)
-            agg_passed = agg_value is not None and agg_value <= threshold
+            comparator, display_metric, agg_value = lookup_invoice_metric_value(
+                invoice_aggregate_metrics, metric_name
+            )
+            if comparator == "min":
+                agg_passed = agg_value is not None and agg_value >= threshold
+            else:
+                agg_passed = agg_value is not None and agg_value <= threshold
             if agg_value is None:
                 detail = (
-                    f"fact_subscription_invoice aggregate {metric_name} missing in "
+                    "fact_subscription_invoice aggregate "
+                    f"{display_metric or metric_name} missing in "
                     f"{data_health_path.name}"
                 )
             else:
+                limit_text = _format_value(display_metric, threshold)
+                comparison_symbol = "≥" if comparator == "min" else "≤"
                 detail = (
-                    f"fact_subscription_invoice aggregate {metric_name} "
-                    f"{_format_value(metric_name, agg_value)} "
-                    f"(limit {_format_value(metric_name, threshold)})"
+                    f"fact_subscription_invoice aggregate {display_metric} "
+                    f"{_format_value(display_metric, agg_value)} "
+                    f"(limit {limit_text}, {comparison_symbol})"
                 )
             checks.append(
                 {
@@ -1157,6 +1175,15 @@ def validate_cmd(
             )
             if not agg_passed:
                 issues.append(detail)
+    elif invoice_aggs_enabled and invoice_aggregate_thresholds:
+        detail = (
+            "fact_subscription_invoice aggregates missing in "
+            f"{data_health_path.name}"
+        )
+        checks.append(
+            {"name": "slo.invoice_aggregates", "passed": False, "detail": detail}
+        )
+        issues.append(detail)
 
     overall_pass = all(check.get("passed", False) for check in checks)
     exit_code = 0 if (overall_pass or not strict) else 1

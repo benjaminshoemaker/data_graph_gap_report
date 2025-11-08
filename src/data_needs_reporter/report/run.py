@@ -15,7 +15,10 @@ from data_needs_reporter.report.entities import (
     extract_entities,
 )
 from data_needs_reporter.report.llm import LLMClient
-from data_needs_reporter.report.metrics import compute_data_health
+from data_needs_reporter.report.metrics import (
+    compute_data_health,
+    lookup_invoice_metric_value,
+)
 from data_needs_reporter.report.scoring import (
     ScoringWeights,
     compute_confidence,
@@ -45,6 +48,12 @@ DEFAULT_DEMAND_WEIGHTS: Dict[str, float] = {
     "email": 0.20,
 }
 SUMMARY_MAX_LEN = 160
+INVOICE_DISPLAY_METRICS = (
+    "missing_pct",
+    "on_time_pct",
+    "dup_key_pct",
+    "p95_payment_lag_min",
+)
 
 
 def _require_polars() -> "pl":
@@ -664,6 +673,79 @@ def _assemble_actions(
     return sorted(actions, key=lambda item: item["score"], reverse=True)
 
 
+def _format_invoice_value(metric: str, value: Optional[float]) -> str:
+    if value is None:
+        return "n/a"
+    if metric == "row_count":
+        return f"{int(value)}"
+    if metric.endswith("_min") or metric.endswith("_minutes"):
+        return f"{value:.2f} min"
+    return f"{value:.2f}%"
+
+
+def _summarize_invoice_aggregates(
+    config: AppConfig, data_health: Mapping[str, Any]
+) -> Optional[Dict[str, Any]]:
+    invoice_cfg = getattr(config.report, "invoice_aggregates", None)
+    aggregates_section = data_health.get("aggregates_by_table")
+    if not isinstance(aggregates_section, Mapping):
+        return None
+    invoice_entry = aggregates_section.get("fact_subscription_invoice")
+    if not isinstance(invoice_entry, Mapping) or not invoice_entry:
+        return None
+
+    summary: Dict[str, Any] = {"metrics": dict(invoice_entry)}
+    summary["enabled"] = (
+        bool(getattr(invoice_cfg, "enabled", False)) if invoice_cfg else False
+    )
+
+    thresholds: Dict[str, float] = {}
+    invoice_slos_cfg = getattr(invoice_cfg, "slos", None) if invoice_cfg else None
+    if invoice_slos_cfg is not None:
+        if hasattr(invoice_slos_cfg, "model_dump"):
+            raw_slos = invoice_slos_cfg.model_dump(exclude_none=True)
+        elif isinstance(invoice_slos_cfg, Mapping):
+            raw_slos = {k: v for k, v in invoice_slos_cfg.items() if v is not None}
+        else:
+            raw_slos = {}
+        for key, value in raw_slos.items():
+            try:
+                thresholds[key] = float(value)
+            except (TypeError, ValueError):
+                continue
+
+    if not thresholds:
+        return summary
+
+    checks: List[Dict[str, Any]] = []
+    passed = True
+    for key, threshold in thresholds.items():
+        comparator, metric_name, value = lookup_invoice_metric_value(
+            summary["metrics"], key
+        )
+        if comparator == "min":
+            metric_passed = value is not None and value >= threshold
+        else:
+            metric_passed = value is not None and value <= threshold
+        checks.append(
+            {
+                "name": key,
+                "metric": metric_name,
+                "comparator": comparator,
+                "threshold": threshold,
+                "value": value,
+                "passed": metric_passed,
+            }
+        )
+        if not metric_passed:
+            passed = False
+
+    summary["slos"] = thresholds
+    summary["checks"] = checks
+    summary["passed"] = passed
+    return summary
+
+
 def write_exec_summary(
     config: AppConfig,
     warehouse_path: Path,
@@ -784,6 +866,9 @@ def write_exec_summary(
         "top_actions": top_actions,
         "notes": "Synthesized demand, severity, and revenue scores from generated data.",
     }
+    invoice_summary = _summarize_invoice_aggregates(config, data_health)
+    if invoice_summary:
+        exec_summary["invoice_aggregates"] = invoice_summary
     exec_json = out_dir / "exec_summary.json"
     exec_json.write_text(json.dumps(exec_summary, indent=2), encoding="utf-8")
 
@@ -797,6 +882,35 @@ def write_exec_summary(
         exec_md_lines.append(line)
         if action["examples"]:
             exec_md_lines.append(f"   e.g., {action['examples'][0]['text']}")
+    if invoice_summary:
+        exec_md_lines.append("")
+        exec_md_lines.append("## Invoice Aggregates")
+        checks = invoice_summary.get("checks") or []
+        if checks:
+            for check in checks:
+                metric_name = check.get("metric") or check.get("name")
+                value_text = _format_invoice_value(metric_name, check.get("value"))
+                threshold_text = _format_invoice_value(
+                    metric_name, check.get("threshold")
+                )
+                symbol = "≥" if check.get("comparator") == "min" else "≤"
+                status = "PASS" if check.get("passed") else "FAIL"
+                exec_md_lines.append(
+                    f"- {metric_name}: {value_text} "
+                    f"(limit {threshold_text}, {symbol}) — {status}"
+                )
+        else:
+            metrics = invoice_summary.get("metrics", {})
+            metric_lines = []
+            for name in INVOICE_DISPLAY_METRICS:
+                if name in metrics:
+                    metric_lines.append(
+                        f"{name}: {_format_invoice_value(name, metrics.get(name))}"
+                    )
+            if metric_lines:
+                exec_md_lines.append("Metrics:")
+                for entry in metric_lines:
+                    exec_md_lines.append(f"  - {entry}")
     (out_dir / "exec_summary.md").write_text(
         "\n\n".join(exec_md_lines), encoding="utf-8"
     )

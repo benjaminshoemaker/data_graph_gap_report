@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from statistics import median
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 try:  # pragma: no cover - optional dependency
     import polars as pl
@@ -33,6 +33,114 @@ def _scan_parquet(path: Path, columns: Sequence[str] | None = None) -> "pl.LazyF
         selected = [polars.col(col) for col in columns]
         lazy_frame = lazy_frame.select(selected)
     return lazy_frame
+
+
+INVOICE_ON_TIME_GRACE = timedelta(days=2)
+
+
+def compute_invoice_aggregates(df: "pl.DataFrame") -> Dict[str, float]:
+    polars = _require_polars()
+    metrics: Dict[str, float] = {
+        "missing_pct": 0.0,
+        "on_time_pct": 100.0,
+        "dup_key_pct": 0.0,
+        "p95_payment_lag_min": 0.0,
+    }
+    if df.height == 0:
+        return metrics
+
+    plan_col = next(
+        (candidate for candidate in ("plan_id", "plan_key") if candidate in df.columns),
+        None,
+    )
+    if plan_col:
+        missing_ratio = (
+            df.select(polars.col(plan_col).is_null().mean().alias("_missing")).item()
+            or 0.0
+        )
+        metrics["missing_pct"] = float(missing_ratio * 100.0)
+
+    if "invoice_id" in df.columns:
+        metrics["dup_key_pct"] = float(dup_key_pct(df, ("invoice_id",)))
+
+    paid_col = "paid_at" if "paid_at" in df.columns else None
+    due_col = next(
+        (
+            candidate
+            for candidate in ("period_end", "invoice_date", "period_start")
+            if candidate in df.columns
+        ),
+        None,
+    )
+    if paid_col and due_col:
+        payment_pairs = (
+            df.select(
+                [
+                    polars.col(paid_col).alias("_paid_at"),
+                    polars.col(due_col).alias("_due_at"),
+                ]
+            )
+            .drop_nulls()
+            .to_dicts()
+        )
+        total = len(payment_pairs)
+        if total:
+            grace_seconds = float(INVOICE_ON_TIME_GRACE.total_seconds())
+            on_time = 0
+            for row in payment_pairs:
+                paid_at = row.get("_paid_at")
+                due_at = row.get("_due_at")
+                if isinstance(paid_at, datetime) and isinstance(due_at, datetime):
+                    if (paid_at - due_at).total_seconds() <= grace_seconds:
+                        on_time += 1
+            metrics["on_time_pct"] = _pct(on_time, total)
+
+    if paid_col and "loaded_at" in df.columns:
+        lag_frame = df.select(
+            (
+                (polars.col("loaded_at") - polars.col(paid_col)).dt.total_seconds()
+                / 60.0
+            ).alias("_payment_lag_min")
+        ).drop_nulls()
+        if lag_frame.height:
+            metrics["p95_payment_lag_min"] = float(
+                lag_frame.select(
+                    polars.col("_payment_lag_min").quantile(
+                        0.95, interpolation="higher"
+                    )
+                ).item()
+                or 0.0
+            )
+
+    return metrics
+
+
+def resolve_invoice_slo(metric_name: str) -> Tuple[str, str]:
+    lowered = metric_name.lower()
+    if lowered.startswith("min_"):
+        return "min", metric_name[4:]
+    if lowered.startswith("max_"):
+        return "max", metric_name[4:]
+    return "max", metric_name
+
+
+def lookup_invoice_metric_value(
+    metrics: Optional[Mapping[str, Any]], slo_key: str
+) -> Tuple[str, str, Optional[float]]:
+    comparator, base_key = resolve_invoice_slo(slo_key)
+    if not metrics:
+        return comparator, base_key, None
+    for candidate in (slo_key, base_key):
+        if not candidate:
+            continue
+        raw_value = metrics.get(candidate)
+        if raw_value is None:
+            continue
+        try:
+            return comparator, base_key, float(raw_value)
+        except (TypeError, ValueError):
+            continue
+    return comparator, base_key, None
 
 
 def key_null_pct(df: "pl.DataFrame", columns: Sequence[str]) -> float:
@@ -3200,6 +3308,14 @@ def compute_data_health(warehouse_dir: Path, tz: str) -> Dict[str, object]:
                     table_metrics.get("p95_ingest_lag_min", 0.0) or 0.0
                 ),
             }
+            try:
+                invoices_df = lf.collect(streaming=True)
+            except Exception:  # pragma: no cover - collection errors rare
+                invoices_df = None
+            if invoices_df is not None:
+                aggregates_by_table[spec.table].update(
+                    compute_invoice_aggregates(invoices_df)
+                )
 
     aggregates: Dict[str, float] = {
         "key_null_pct": _pct(agg_key_null_rows, agg_rows),
@@ -3238,6 +3354,7 @@ __all__ = [
     "TableHealthSpec",
     "compute_table_metrics",
     "compute_data_health",
+    "compute_invoice_aggregates",
     "validate_warehouse_schema",
     "validate_volume_targets",
     "validate_quality_targets",
@@ -3252,4 +3369,6 @@ __all__ = [
     "validate_event_correlation",
     "validate_reproducibility",
     "validate_spend_caps",
+    "resolve_invoice_slo",
+    "lookup_invoice_metric_value",
 ]
