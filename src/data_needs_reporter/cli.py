@@ -38,7 +38,6 @@ from data_needs_reporter.report.metrics import (
     validate_comms_targets,
     validate_event_correlation,
     validate_marketplace_category_caps,
-    validate_marketplace_evening_coverage,
     validate_monetization_targets,
     validate_quality_targets,
     validate_reproducibility,
@@ -603,7 +602,7 @@ def run_report_cmd(
 
     warehouse_path = Path(warehouse)
     tz_config = getattr(getattr(config, "warehouse", object()), "tz", "UTC")
-    data_health_payload = write_data_health_report(warehouse_path, tz_config, out_dir)
+    data_health_payload = write_data_health_report(config, warehouse_path, out_dir)
     tables_section = data_health_payload.get("tables", {})
     table_rows: list[dict[str, object]] = []
     if isinstance(tables_section, Mapping):
@@ -883,27 +882,6 @@ def _run_checks(
     ]
     if not dry_run_warehouse and archetype_key == "marketplace":
         marketplace_cfg = getattr(config.report, "marketplace", None)
-        evening_cfg = getattr(marketplace_cfg, "evening_window", None)
-        start_hour = getattr(evening_cfg, "start_hour", 17)
-        end_hour = getattr(evening_cfg, "end_hour", 21)
-        min_share_pct = getattr(evening_cfg, "min_share_pct", 20.0)
-        min_days_pct = getattr(evening_cfg, "min_days_pct", 80.0)
-        evening_result = validate_marketplace_evening_coverage(
-            warehouse,
-            tz=config.warehouse.tz,
-            window_days=config.report.window_days,
-            start_hour=start_hour,
-            end_hour=end_hour,
-            min_share_pct=min_share_pct,
-            min_days_pct=min_days_pct,
-        )
-        checks.append(
-            {
-                "name": "marketplace_evening_coverage",
-                "passed": evening_result["passed"],
-                "detail": evening_result["detail"],
-            }
-        )
         category_caps_cfg = getattr(marketplace_cfg, "category_caps", None)
         caps_values: Optional[Mapping[str, float]] = None
         rollup_caps = False
@@ -968,6 +946,7 @@ def validate_cmd(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     result = _run_checks(warehouse, comms, strict, config)
+    archetype_key = _detect_archetype_from_path(warehouse, config)
     checks: list[dict[str, object]] = list(result.get("checks", []))
     issues: list[str] = [
         f"{check.get('name')} failed: {check.get('detail')}"
@@ -1054,6 +1033,11 @@ def validate_cmd(
         entry = aggregates_by_table.get("fact_subscription_invoice")
         if isinstance(entry, Mapping):
             invoice_aggregate_metrics = entry
+    evening_metrics = None
+    if isinstance(data_health_payload, Mapping):
+        raw_evening = data_health_payload.get("marketplace_evening_window")
+        if isinstance(raw_evening, Mapping):
+            evening_metrics = raw_evening
 
     for metric_name, threshold_raw in slo_thresholds.items():
         try:
@@ -1184,6 +1168,66 @@ def validate_cmd(
             {"name": "slo.invoice_aggregates", "passed": False, "detail": detail}
         )
         issues.append(detail)
+
+    if archetype_key == "marketplace":
+        marketplace_cfg = getattr(config.report, "marketplace", None)
+        evening_cfg = (
+            getattr(marketplace_cfg, "evening_window", None)
+            if marketplace_cfg
+            else None
+        )
+        start_hour = getattr(evening_cfg, "start_hour", 17)
+        end_hour = getattr(evening_cfg, "end_hour", 21)
+        min_share_pct = getattr(evening_cfg, "min_share_pct", 20.0)
+        min_days_pct = getattr(evening_cfg, "min_days_pct", 80.0)
+        if evening_metrics is None:
+            detail = (
+                "marketplace evening coverage metrics missing in "
+                f"{data_health_path.name}"
+            )
+            for suffix in ("overall_share_pct", "days_pct"):
+                checks.append(
+                    {
+                        "name": f"slo.marketplace_evening.{suffix}",
+                        "passed": False,
+                        "detail": detail,
+                    }
+                )
+            issues.append(detail)
+        else:
+            overall_value = float(evening_metrics.get("overall_share_pct") or 0.0)
+            overall_detail = (
+                f"Marketplace evening overall share "
+                f"{_format_value('overall_share_pct', overall_value)} "
+                f"(limit {_format_value('overall_share_pct', min_share_pct)}, ≥)"
+            )
+            overall_pass = overall_value >= float(min_share_pct)
+            checks.append(
+                {
+                    "name": "slo.marketplace_evening.overall_share_pct",
+                    "passed": overall_pass,
+                    "detail": overall_detail,
+                }
+            )
+            if not overall_pass:
+                issues.append(overall_detail)
+
+            days_value = float(evening_metrics.get("days_pct") or 0.0)
+            days_detail = (
+                f"Marketplace evening qualifying days "
+                f"{_format_value('days_pct', days_value)} "
+                f"(limit {_format_value('days_pct', min_days_pct)}, ≥)"
+            )
+            days_pass = days_value >= float(min_days_pct)
+            checks.append(
+                {
+                    "name": "slo.marketplace_evening.days_pct",
+                    "passed": days_pass,
+                    "detail": days_detail,
+                }
+            )
+            if not days_pass:
+                issues.append(days_detail)
 
     overall_pass = all(check.get("passed", False) for check in checks)
     exit_code = 0 if (overall_pass or not strict) else 1
