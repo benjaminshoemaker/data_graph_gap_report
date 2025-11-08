@@ -15,6 +15,8 @@ jobs:
     env:
       POETRY_VIRTUALENVS_IN_PROJECT: "true"
       POETRY_VIRTUALENVS_CREATE: "false"
+      PYTHONHASHSEED: "1337"
+      TEST_RNG_SEED: "1337"
     steps:
       - name: Initialize timing table
         run: |
@@ -110,8 +112,12 @@ jobs:
           printf 'Project install duration: %ss\n' "$duration"
           printf '| Poetry Install | %s |\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
           echo "LAST_TIME=$now" >> "$GITHUB_ENV"
-      - name: Run pytest with coverage
+      - name: Run pytest (unit)
+        run: poetry run pytest -q -m "not slow"
+      - name: Run pytest (coverage)
         run: poetry run pytest --cov=data_needs_reporter --cov-report=xml --cov-report=term
+      - name: Run pytest (end-to-end)
+        run: poetry run pytest -q tests/test_end_to_end.py
       - name: Log pytest duration
         run: |
           now=$(date +%s)
