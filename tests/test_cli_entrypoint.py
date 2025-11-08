@@ -13,6 +13,15 @@ def _scripts_dir(venv_dir: Path) -> Path:
     return venv_dir / ("Scripts" if os.name == "nt" else "bin")
 
 
+def _ensure_modern_pip(python_bin: Path, env: dict[str, str]) -> None:
+    """Upgrade pip so editable installs support pyproject builds."""
+    subprocess.run(
+        [str(python_bin), "-m", "pip", "install", "--upgrade", "pip"],
+        check=True,
+        env=env,
+    )
+
+
 def _host_site_packages() -> list[str]:
     paths: list[str] = []
     for entry in sys.path:
@@ -25,6 +34,7 @@ def _host_site_packages() -> list[str]:
 def _install_editable(python_bin: Path, env: dict[str, str]) -> None:
     env = dict(env)
     env.setdefault("PIP_NO_BUILD_ISOLATION", "1")
+    _ensure_modern_pip(python_bin, env)
     subprocess.run(
         [
             str(python_bin),
