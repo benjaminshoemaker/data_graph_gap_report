@@ -11,7 +11,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 try:  # pragma: no cover - unavailable on Windows
     import resource
@@ -93,6 +93,11 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--report-file",
         type=Path,
         help="Optional path to write the benchmark summary when using JSON output.",
+    )
+    parser.add_argument(
+        "--markdown-summary",
+        action="store_true",
+        help="Print a condensed Markdown table summary (Step, Samples, P50, P95, Max).",
     )
     parser.add_argument(
         "--fail-on-budget",
@@ -292,6 +297,7 @@ def _summarize_results(results: List[BenchResult]) -> Dict[str, Any]:
                 "target_s": item.target_s,
                 "exit_code": item.exit_code,
                 "within_budget": item.within_budget,
+                "samples": 1,
             }
             for item in results
         ],
@@ -303,6 +309,55 @@ def _summarize_results(results: List[BenchResult]) -> Dict[str, Any]:
         "total_elapsed_s": round(sum(item.elapsed_s for item in results), 4),
         "platform": platform.platform(),
     }
+
+
+def _coerce_int(value: object, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _extract_ms(entry: Mapping[str, Any], field: str, *fallback_fields: str) -> float:
+    if field in entry and entry[field] is not None:
+        return max(_coerce_float(entry[field]), 0.0)
+    for alt in fallback_fields:
+        if alt in entry and entry[alt] is not None:
+            return max(_coerce_float(entry[alt]), 0.0)
+    elapsed = entry.get("elapsed_s")
+    if elapsed is not None:
+        return max(_coerce_float(elapsed) * 1000.0, 0.0)
+    return 0.0
+
+
+def render_markdown_summary(summary: Mapping[str, Any]) -> str:
+    commands = summary.get("commands")
+    lines = [
+        "| Step | Samples | P50_ms | P95_ms | Max_ms |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    if isinstance(commands, Sequence):
+        for entry in commands:
+            if not isinstance(entry, Mapping):
+                continue
+            name = str(entry.get("name") or "")
+            samples = _coerce_int(entry.get("samples"), 1)
+            p50_ms = _extract_ms(entry, "p50_ms")
+            p95_ms = _extract_ms(entry, "p95_ms", "p95_s")
+            max_ms = _extract_ms(entry, "max_ms", "max_s")
+            lines.append(
+                f"| {name or '—'} | {samples} | {p50_ms:.1f} | {p95_ms:.1f} | {max_ms:.1f} |"
+            )
+    if len(lines) == 2:
+        lines.append("| — | 0 | 0.0 | 0.0 | 0.0 |")
+    return "\n".join(lines)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -370,6 +425,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if workspace_ctx is not None:
         workspace_ctx.cleanup()
+
+    if args.markdown_summary:
+        print(render_markdown_summary(summary))
 
     return exit_code
 

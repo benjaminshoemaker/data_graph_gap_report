@@ -1,4 +1,4 @@
-# Data‑Needs Reporter — TODO
+# Data‑Needs Reporter v0.1.2 — TODO
 
 Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded.
 
@@ -30,7 +30,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [ ] Confirm the next CI run executes `pytest` end-to-end
 - [x] Ensure benchmark summaries produce valid JSON artifacts
   - [x] Add `--report-file` support to `scripts/bench.py` and update CI to use it
-  - [ ] Watch the benchmark job to confirm `bench.json` parses and the summary step renders
+  - [x] Watch the benchmark job to confirm `bench.json` parses and the summary step renders
 - [x] Makefile/justfile targets
   - [x] `make test`, `make lint`, `make fmt`, `make e2e`
 
@@ -154,13 +154,13 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
   - [x] Null spike detection (daily vs 7-day median +8.0)
 - [x] SLO check using config thresholds
 - [x] Validate quality targets in `validate` gate (merchant key null, card orphan, txn dup, txn lag)
-  - [ ] Extend coverage to invoice aggregates when targets finalize
+  - [x] Extend coverage to invoice aggregates when targets finalize
 - [x] Validate seasonality + hour peaks in `validate` gate (weekend ratios, 10–14 & 17–21 coverage)
   - [ ] Fold in marketplace evening window guardrails once command outputs available
 - [x] Validate taxonomy coverage in `validate` gate (neobank MCC breadth, marketplace category share caps)
-  - [ ] Expand marketplace check once GMV from subcategories needs weighting
+  - [x] Expand marketplace check once GMV from subcategories needs weighting
 - [x] Validate monetization sanity in `validate` gate (interchange %, attach rate, marketplace take rate)
-  - [ ] Reconcile attach targets once additional subscription tiers introduced
+  - [x] Reconcile attach targets once additional subscription tiers introduced
 - [x] Validate comms volumes and mix in `validate` gate (source counts, bucket floors, exec share)
 - [x] Plots:
   - [x] `lag_p95_daily.png`, `key_null_pct_daily.png`, `orphan_pct_daily.png`, `dup_key_pct_bar.png`, `theme_demand_monthly.png`
