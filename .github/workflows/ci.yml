@@ -182,7 +182,7 @@ jobs:
           else
             echo "bench.json missing"
           fi
-      - name: Upload Artifact: bench.json
+      - name: "Upload Artifact: bench.json"
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -222,7 +222,7 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
               fh.write("\n".join(lines) + "\n")
           PY
-      - name: Job Summary: bench
+      - name: "Job Summary: bench"
         if: always()
         run: |
           if [[ -f bench.json ]]; then
