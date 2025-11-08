@@ -36,6 +36,7 @@ def _scan_parquet(path: Path, columns: Sequence[str] | None = None) -> "pl.LazyF
 
 
 INVOICE_ON_TIME_GRACE = timedelta(days=2)
+DEFAULT_EVENING_WINDOW = (17, 21)
 
 
 def compute_invoice_aggregates(df: "pl.DataFrame") -> Dict[str, float]:
@@ -112,6 +113,114 @@ def compute_invoice_aggregates(df: "pl.DataFrame") -> Dict[str, float]:
                 or 0.0
             )
 
+    return metrics
+
+
+def compute_evening_window_share(
+    payments_df: "pl.DataFrame",
+    *,
+    tz: str,
+    window_days: int,
+    start_hour: int,
+    end_hour: int,
+    min_share_pct: float,
+    min_days_pct: float,
+) -> Dict[str, object]:
+    polars = _require_polars()
+    metrics: Dict[str, object] = {
+        "daily_share_pct": [],
+        "overall_share_pct": 0.0,
+        "days_pct": 0.0,
+        "qualifying_days": 0,
+        "total_days": 0,
+        "start_hour": start_hour,
+        "end_hour": end_hour,
+        "window_days": window_days,
+        "threshold_share_pct": min_share_pct,
+        "threshold_days_pct": min_days_pct,
+    }
+    if payments_df is None or payments_df.height == 0:
+        return metrics
+    column = "captured_at"
+    if column not in payments_df.columns:
+        return metrics
+    filtered = payments_df.filter(polars.col(column).is_not_null())
+    if filtered.height == 0:
+        return metrics
+
+    ts_dtype = filtered.schema.get(column)
+    local_expr = _local_timestamp_expr(column, tz, ts_dtype)
+    day_expr = _day_trunc_expr(column, tz, ts_dtype)
+
+    daily_df = (
+        filtered.with_columns(
+            [
+                local_expr.alias("_local_ts"),
+                day_expr.alias("_local_day"),
+            ]
+        )
+        .with_columns(
+            [
+                polars.col("_local_ts").dt.hour().alias("_local_hour"),
+                polars.col("_local_ts")
+                .dt.hour()
+                .is_between(start_hour, end_hour, closed="both")
+                .cast(polars.Int64)
+                .alias("_is_evening"),
+            ]
+        )
+        .group_by("_local_day")
+        .agg(
+            [
+                polars.count().alias("total_events"),
+                polars.col("_is_evening").sum().alias("evening_events"),
+            ]
+        )
+        .sort("_local_day")
+    )
+
+    if daily_df.height == 0:
+        return metrics
+
+    max_day = daily_df["_local_day"].max()
+    if max_day is None:
+        return metrics
+    cutoff = max_day - timedelta(days=max(window_days - 1, 0))
+    window_df = (
+        daily_df.filter(polars.col("_local_day") >= polars.lit(cutoff))
+        .filter(polars.col("total_events") > 0)
+        .with_columns(
+            (polars.col("evening_events") / polars.col("total_events") * 100.0).alias(
+                "evening_pct"
+            )
+        )
+    )
+    if window_df.height == 0:
+        return metrics
+
+    total_days = window_df.height
+    qualifying_days = window_df.filter(
+        polars.col("evening_pct") >= min_share_pct
+    ).height
+    qualifying_pct = _pct(qualifying_days, total_days)
+    total_events = float(window_df["total_events"].sum() or 0.0)
+    evening_events = float(window_df["evening_events"].sum() or 0.0)
+
+    metrics.update(
+        {
+            "daily_share_pct": [
+                {
+                    "date": _format_day_value(row["_local_day"]),
+                    "share_pct": float(row["evening_pct"] or 0.0),
+                }
+                for row in window_df.to_dicts()
+            ],
+            "overall_share_pct": _pct(evening_events, total_events),
+            "days_pct": qualifying_pct,
+            "qualifying_days": qualifying_days,
+            "total_days": total_days,
+        }
+    )
     return metrics
 
 
@@ -3355,6 +3464,7 @@ __all__ = [
     "compute_table_metrics",
     "compute_data_health",
     "compute_invoice_aggregates",
+    "compute_evening_window_share",
     "validate_warehouse_schema",
     "validate_volume_targets",
     "validate_quality_targets",

@@ -9,6 +9,7 @@ pytest.importorskip("polars")
 import polars as pl  # noqa: E402
 
 from data_needs_reporter.report.metrics import (  # noqa: E402
+    compute_evening_window_share,
     validate_marketplace_category_caps,
     validate_marketplace_evening_coverage,
 )
@@ -172,6 +173,44 @@ def test_evening_coverage_fail(tmp_path: Path) -> None:
     )
     assert result["passed"] is False
     assert "Evening coverage shortfall" in result["detail"]
+
+
+def test_compute_evening_window_share_pass(tmp_path: Path) -> None:
+    warehouse = tmp_path / "coverage_metrics_pass"
+    _write_marketplace_orders_for_coverage(
+        warehouse, total_days=10, evening_days=set(range(8))
+    )
+    payments = pl.read_parquet(warehouse / "fact_payment.parquet")
+    metrics = compute_evening_window_share(
+        payments,
+        tz="UTC",
+        window_days=10,
+        start_hour=17,
+        end_hour=21,
+        min_share_pct=20.0,
+        min_days_pct=80.0,
+    )
+    assert metrics["overall_share_pct"] >= 20.0
+    assert metrics["days_pct"] >= 80.0
+    assert metrics["daily_share_pct"]
+
+
+def test_compute_evening_window_share_fail(tmp_path: Path) -> None:
+    warehouse = tmp_path / "coverage_metrics_fail"
+    _write_marketplace_orders_for_coverage(
+        warehouse, total_days=10, evening_days=set(range(3))
+    )
+    payments = pl.read_parquet(warehouse / "fact_payment.parquet")
+    metrics = compute_evening_window_share(
+        payments,
+        tz="UTC",
+        window_days=10,
+        start_hour=17,
+        end_hour=21,
+        min_share_pct=20.0,
+        min_days_pct=80.0,
+    )
+    assert metrics["overall_share_pct"] < 20.0 or metrics["days_pct"] < 80.0
 
 
 def test_category_caps_pass(tmp_path: Path) -> None:

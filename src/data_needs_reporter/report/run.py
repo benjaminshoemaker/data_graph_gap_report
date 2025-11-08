@@ -17,6 +17,7 @@ from data_needs_reporter.report.entities import (
 from data_needs_reporter.report.llm import LLMClient
 from data_needs_reporter.report.metrics import (
     compute_data_health,
+    compute_evening_window_share,
     lookup_invoice_metric_value,
 )
 from data_needs_reporter.report.scoring import (
@@ -48,6 +49,7 @@ DEFAULT_DEMAND_WEIGHTS: Dict[str, float] = {
     "email": 0.20,
 }
 SUMMARY_MAX_LEN = 160
+DEFAULT_EVENING_WINDOW = (17, 21)
 INVOICE_DISPLAY_METRICS = (
     "missing_pct",
     "on_time_pct",
@@ -208,8 +210,9 @@ def assess_budget_health(
 
 
 def write_data_health_report(
-    warehouse_dir: Path, tz: str, out_dir: Path
+    config: AppConfig, warehouse_dir: Path, out_dir: Path
 ) -> Dict[str, object]:
+    tz = getattr(getattr(config, "warehouse", object()), "tz", "UTC")
     payload = compute_data_health(Path(warehouse_dir), tz)
     out_path = Path(out_dir)
     tables = payload.get("tables")
@@ -242,6 +245,30 @@ def write_data_health_report(
     aggregates_by_table = payload.get("aggregates_by_table")
     if not isinstance(aggregates_by_table, dict):
         payload["aggregates_by_table"] = {}
+    marketplace_cfg = getattr(getattr(config, "report", object()), "marketplace", None)
+    if marketplace_cfg is not None:
+        payments_path = Path(warehouse_dir) / "fact_payment.parquet"
+        payments_df = _read_parquet_frame(payments_path)
+        if payments_df is not None and payments_df.height:
+            window_cfg = getattr(marketplace_cfg, "evening_window", None)
+            start_hour = getattr(window_cfg, "start_hour", DEFAULT_EVENING_WINDOW[0])
+            end_hour = getattr(window_cfg, "end_hour", DEFAULT_EVENING_WINDOW[1])
+            min_share_pct = getattr(window_cfg, "min_share_pct", 20.0)
+            min_days_pct = getattr(window_cfg, "min_days_pct", 80.0)
+            window_days = getattr(
+                getattr(config, "report", object()), "window_days", 30
+            )
+            metrics = compute_evening_window_share(
+                payments_df,
+                tz=tz,
+                window_days=int(window_days or 30),
+                start_hour=int(start_hour),
+                end_hour=int(end_hour),
+                min_share_pct=float(min_share_pct),
+                min_days_pct=float(min_days_pct),
+            )
+            payload["marketplace_evening_window"] = metrics
+
     out_path.mkdir(parents=True, exist_ok=True)
     (out_path / "data_health.json").write_text(
         json.dumps(payload, indent=2), encoding="utf-8"
@@ -746,6 +773,31 @@ def _summarize_invoice_aggregates(
     return summary
 
 
+def _summarize_evening_window(
+    config: AppConfig, data_health: Mapping[str, Any]
+) -> Optional[Dict[str, Any]]:
+    marketplace_cfg = getattr(getattr(config, "report", object()), "marketplace", None)
+    metrics = data_health.get("marketplace_evening_window")
+    if not isinstance(metrics, Mapping) or not marketplace_cfg:
+        return None
+    summary = dict(metrics)
+    evening_cfg = getattr(marketplace_cfg, "evening_window", None)
+    if evening_cfg is not None:
+        summary.setdefault(
+            "threshold_share_pct", getattr(evening_cfg, "min_share_pct", 20.0)
+        )
+        summary.setdefault(
+            "threshold_days_pct", getattr(evening_cfg, "min_days_pct", 80.0)
+        )
+        summary.setdefault(
+            "start_hour", getattr(evening_cfg, "start_hour", DEFAULT_EVENING_WINDOW[0])
+        )
+        summary.setdefault(
+            "end_hour", getattr(evening_cfg, "end_hour", DEFAULT_EVENING_WINDOW[1])
+        )
+    return summary
+
+
 def write_exec_summary(
     config: AppConfig,
     warehouse_path: Path,
@@ -869,6 +921,9 @@ def write_exec_summary(
     invoice_summary = _summarize_invoice_aggregates(config, data_health)
     if invoice_summary:
         exec_summary["invoice_aggregates"] = invoice_summary
+    evening_summary = _summarize_evening_window(config, data_health)
+    if evening_summary:
+        exec_summary["marketplace_evening_window"] = evening_summary
     exec_json = out_dir / "exec_summary.json"
     exec_json.write_text(json.dumps(exec_summary, indent=2), encoding="utf-8")
 
@@ -911,6 +966,26 @@ def write_exec_summary(
                 exec_md_lines.append("Metrics:")
                 for entry in metric_lines:
                     exec_md_lines.append(f"  - {entry}")
+    if evening_summary:
+        exec_md_lines.append("")
+        exec_md_lines.append("## Marketplace Evening Coverage")
+        share_limit = evening_summary.get("threshold_share_pct", 0.0)
+        days_limit = evening_summary.get("threshold_days_pct", 0.0)
+        overall_value = evening_summary.get("overall_share_pct")
+        days_value = evening_summary.get("days_pct")
+        exec_md_lines.append(
+            f"- Overall Share: {_format_invoice_value('overall_share_pct', overall_value)} "
+            f"(limit {_format_invoice_value('overall_share_pct', share_limit)}, ≥)"
+        )
+        exec_md_lines.append(
+            f"- Qualifying Days: {_format_invoice_value('days_pct', days_value)} "
+            f"(limit {_format_invoice_value('days_pct', days_limit)}, ≥)"
+        )
+        exec_md_lines.append(
+            f"- Window: {int(evening_summary.get('start_hour', DEFAULT_EVENING_WINDOW[0])):02d}:00–"
+            f"{int(evening_summary.get('end_hour', DEFAULT_EVENING_WINDOW[1])):02d}:59 "
+            f"over {int(evening_summary.get('window_days', 0))} days"
+        )
     (out_dir / "exec_summary.md").write_text(
         "\n\n".join(exec_md_lines), encoding="utf-8"
     )
