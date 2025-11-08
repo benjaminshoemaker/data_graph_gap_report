@@ -601,7 +601,6 @@ def run_report_cmd(
     now = datetime.utcnow().isoformat()
 
     warehouse_path = Path(warehouse)
-    tz_config = getattr(getattr(config, "warehouse", object()), "tz", "UTC")
     data_health_payload = write_data_health_report(config, warehouse_path, out_dir)
     tables_section = data_health_payload.get("tables", {})
     table_rows: list[dict[str, object]] = []
@@ -1099,7 +1098,7 @@ def validate_cmd(
             invoice_aggs_enabled = bool(invoice_cfg_raw.get("enabled"))
             invoice_slos_cfg = invoice_cfg_raw.get("slos")
 
-    invoice_aggregate_thresholds: Dict[str, float] = {}
+    invoice_aggregate_thresholds: dict[str, float] = {}
     if invoice_slos_cfg is not None:
         if hasattr(invoice_slos_cfg, "model_dump"):
             raw_slos = invoice_slos_cfg.model_dump(exclude_none=True)
@@ -1176,8 +1175,6 @@ def validate_cmd(
             if marketplace_cfg
             else None
         )
-        start_hour = getattr(evening_cfg, "start_hour", 17)
-        end_hour = getattr(evening_cfg, "end_hour", 21)
         min_share_pct = getattr(evening_cfg, "min_share_pct", 20.0)
         min_days_pct = getattr(evening_cfg, "min_days_pct", 80.0)
         if evening_metrics is None:
