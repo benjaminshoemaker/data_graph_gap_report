@@ -163,7 +163,9 @@ def _write_minimal_neobank_warehouse(path: Path) -> None:
 
     invoice_customers = list(range(1, 10))  # 9% attach
     tier_sequence = (
-        ["Tier A"] * 5 + ["Tier B"] * 3 + ["Tier C"] * max(len(invoice_customers) - 8, 1)
+        ["Tier A"] * 5
+        + ["Tier B"] * 3
+        + ["Tier C"] * max(len(invoice_customers) - 8, 1)
     )
     customer_tiers = {
         cid: tier_sequence[min(idx, len(tier_sequence) - 1)]
@@ -197,7 +199,11 @@ def _write_minimal_neobank_warehouse(path: Path) -> None:
 
     plans = pl.DataFrame(
         {
-            "plan_id": [tier_plan_map["Tier A"], tier_plan_map["Tier B"], tier_plan_map["Tier C"]],
+            "plan_id": [
+                tier_plan_map["Tier A"],
+                tier_plan_map["Tier B"],
+                tier_plan_map["Tier C"],
+            ],
             "name": ["Basic", "Growth", "Scale"],
             "price_cents": [0, 999, 1499],
             "cadence": ["monthly", "monthly", "monthly"],
