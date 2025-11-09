@@ -161,7 +161,15 @@ def _write_minimal_neobank_warehouse(path: Path) -> None:
             cid += 1
     pl.DataFrame(customers).write_parquet(path / "dim_customer.parquet")
 
-    invoice_customers = list(range(1, 9))  # 8% attach
+    invoice_customers = list(range(1, 10))  # 9% attach
+    tier_sequence = (
+        ["Tier A"] * 5 + ["Tier B"] * 3 + ["Tier C"] * max(len(invoice_customers) - 8, 1)
+    )
+    customer_tiers = {
+        cid: tier_sequence[min(idx, len(tier_sequence) - 1)]
+        for idx, cid in enumerate(invoice_customers)
+    }
+    tier_plan_map = {"Tier A": 1, "Tier B": 2, "Tier C": 3}
     months = [_month_offset(base_weekday - timedelta(days=60), idx) for idx in range(8)]
     invoices = []
     invoice_id = 1
@@ -169,21 +177,34 @@ def _write_minimal_neobank_warehouse(path: Path) -> None:
         period_end = start + timedelta(days=30)
         active = invoice_customers[:-1] if idx == len(months) - 1 else invoice_customers
         for cid in active:
+            tier = customer_tiers.get(cid, "Tier C")
             paid_at = period_end + timedelta(days=2, hours=idx)
             invoices.append(
                 {
                     "invoice_id": invoice_id,
                     "customer_id": cid,
-                    "plan_id": 1,
+                    "plan_id": tier_plan_map.get(tier, 1),
                     "period_start": start,
                     "period_end": period_end,
                     "paid_at": paid_at,
                     "amount_cents": 999,
                     "loaded_at": paid_at,
+                    "tier": tier,
                 }
             )
             invoice_id += 1
     pl.DataFrame(invoices).write_parquet(path / "fact_subscription_invoice.parquet")
+
+    plans = pl.DataFrame(
+        {
+            "plan_id": [tier_plan_map["Tier A"], tier_plan_map["Tier B"], tier_plan_map["Tier C"]],
+            "name": ["Basic", "Growth", "Scale"],
+            "price_cents": [0, 999, 1499],
+            "cadence": ["monthly", "monthly", "monthly"],
+            "tier": ["Tier A", "Tier B", "Tier C"],
+        }
+    )
+    plans.write_parquet(path / "dim_plan.parquet")
 
     report_dir = Path("reports") / "neobank"
     report_dir.mkdir(parents=True, exist_ok=True)

@@ -564,9 +564,19 @@ def _load_rows(path: Path, columns: Sequence[str]) -> List[Mapping[str, Any]]:
     polars = _require_polars()
     lazy_frame = polars.scan_parquet(str(path))
     if columns:
-        lazy_frame = lazy_frame.select([polars.col(col) for col in columns])
+        available = set(lazy_frame.columns)
+        selected = [polars.col(col) for col in columns if col in available]
+        if selected:
+            lazy_frame = lazy_frame.select(selected)
     df = lazy_frame.collect(streaming=True)
-    return df.to_dicts()
+    records = df.to_dicts()
+    if columns:
+        missing = [col for col in columns if col not in df.columns]
+        if missing and records:
+            for row in records:
+                for col in missing:
+                    row.setdefault(col, None)
+    return records
 
 
 def _normalized_monthly_score(
@@ -591,7 +601,10 @@ def _normalized_monthly_score(
     return min(max(normalized / 2.0, 0.0), 1.0)
 
 
-def _compute_table_revenue_scores(warehouse_path: Path) -> Dict[str, float]:
+def _compute_table_revenue_scores(
+    warehouse_path: Path,
+    attach_targets: Optional[Mapping[str, float]] = None,
+) -> Dict[str, float]:
     scores: Dict[str, float] = {}
     txn_rows = _load_rows(
         warehouse_path / "fact_card_transaction.parquet",
@@ -609,11 +622,32 @@ def _compute_table_revenue_scores(warehouse_path: Path) -> Dict[str, float]:
 
     invoice_rows = _load_rows(
         warehouse_path / "fact_subscription_invoice.parquet",
-        ["invoice_id", "paid_at", "amount_cents"],
+        ["invoice_id", "paid_at", "amount_cents", "tier"],
     )
+
+    target_map: Dict[str, float] = {}
+    if attach_targets:
+        for key, value in attach_targets.items():
+            if value is None:
+                continue
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                continue
+            if numeric <= 0.0:
+                continue
+            if numeric > 1.0:
+                numeric = numeric / 100.0
+            if numeric <= 0.0:
+                continue
+            target_map[key.strip().lower()] = numeric
 
     def _invoice_value(row: Mapping[str, Any]) -> float:
         amount_cents = float(row.get("amount_cents") or 0.0)
+        tier = str(row.get("tier") or "").strip().lower()
+        if tier and tier in target_map:
+            target = max(target_map[tier], 1e-6)
+            return (amount_cents / 100.0) / target
         return amount_cents / 100.0
 
     scores["fact_subscription_invoice"] = _normalized_monthly_score(
@@ -833,7 +867,16 @@ def write_exec_summary(
     else:
         slos_dict = {}
     table_severity = _compute_table_severity_map(tables_payload, slos_dict)
-    table_revenue = _compute_table_revenue_scores(warehouse_path)
+    monetization_cfg = getattr(config.report, "monetization", None)
+    attach_targets = None
+    if monetization_cfg is not None:
+        if hasattr(monetization_cfg, "attach_targets"):
+            attach_targets = getattr(monetization_cfg, "attach_targets", None)
+        elif isinstance(monetization_cfg, Mapping):
+            attach_targets = monetization_cfg.get("attach_targets")
+    table_revenue = _compute_table_revenue_scores(
+        warehouse_path, attach_targets=attach_targets
+    )
     actions = _assemble_actions(
         theme_stats,
         demand_scores,
