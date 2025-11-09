@@ -156,7 +156,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 - [x] Validate quality targets in `validate` gate (merchant key null, card orphan, txn dup, txn lag)
   - [x] Extend coverage to invoice aggregates when targets finalize
 - [x] Validate seasonality + hour peaks in `validate` gate (weekend ratios, 10–14 & 17–21 coverage)
-  - [ ] Fold in marketplace evening window guardrails once command outputs available
+  - [x] Fold in marketplace evening window guardrails once command outputs available
 - [x] Validate taxonomy coverage in `validate` gate (neobank MCC breadth, marketplace category share caps)
   - [x] Expand marketplace check once GMV from subcategories needs weighting
 - [x] Validate monetization sanity in `validate` gate (interchange %, attach rate, marketplace take rate)
@@ -232,6 +232,7 @@ Use this as a strict checklist. Each item has clear acceptance. Keep runs seeded
 - [x] `data_health.json` and `data_health.csv` per schema
 - [x] `themes.json` and `themes.md` with examples
 - [x] `exec_summary.json` and `exec_summary.md` with top‑3
+- [x] Expose guardrails in outputs: attach `invoice_aggregates` + `marketplace_evening_window` to `data_health.json`; add failing guardrails under “Data Health” in `exec_summary.md`.
 - [x] Figures saved under `figures/`
 - [x] Validate against JSON schemas in tests
 
