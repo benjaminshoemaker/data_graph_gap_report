@@ -1414,8 +1414,6 @@ def validate_marketplace_category_caps(
             mapping_rows.append(
                 {"category_id": cat_id, "group_category_id": int(group_id)}
             )
-    mapping_df = polars.DataFrame(mapping_rows) if mapping_rows else None
-
     path_cache: Dict[int, str] = {}
 
     def resolve_path(category_id: int) -> str:
