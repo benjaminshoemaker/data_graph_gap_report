@@ -105,5 +105,71 @@
     "fk_success_pct": 100.0,
     "orphan_pct": 0.0,
     "p95_ingest_lag_min": 0.0
+  },
+  "aggregates_by_table": {
+    "fact_subscription_invoice": {
+      "key_null_pct": 0.0,
+      "dup_key_pct": 0.0,
+      "fk_success_pct": 100.0,
+      "orphan_pct": 0.0,
+      "p95_ingest_lag_min": 0.0,
+      "missing_pct": 0.0,
+      "on_time_pct": 100.0,
+      "p95_payment_lag_min": 0.0
+    }
+  },
+  "invoice_aggregates": {
+    "metrics": {
+      "key_null_pct": 0.0,
+      "dup_key_pct": 0.0,
+      "fk_success_pct": 100.0,
+      "orphan_pct": 0.0,
+      "p95_ingest_lag_min": 0.0,
+      "missing_pct": 0.0,
+      "on_time_pct": 100.0,
+      "p95_payment_lag_min": 0.0
+    },
+    "enabled": false,
+    "slos": {
+      "max_missing_pct": 5.0,
+      "min_on_time_pct": 90.0,
+      "max_dup_key_pct": 1.0,
+      "max_p95_payment_lag_min": 240.0
+    },
+    "checks": [
+      {
+        "name": "max_missing_pct",
+        "metric": "missing_pct",
+        "comparator": "max",
+        "threshold": 5.0,
+        "value": 0.0,
+        "passed": true
+      },
+      {
+        "name": "min_on_time_pct",
+        "metric": "on_time_pct",
+        "comparator": "min",
+        "threshold": 90.0,
+        "value": 100.0,
+        "passed": true
+      },
+      {
+        "name": "max_dup_key_pct",
+        "metric": "dup_key_pct",
+        "comparator": "max",
+        "threshold": 1.0,
+        "value": 0.0,
+        "passed": true
+      },
+      {
+        "name": "max_p95_payment_lag_min",
+        "metric": "p95_payment_lag_min",
+        "comparator": "max",
+        "threshold": 240.0,
+        "value": 0.0,
+        "passed": true
+      }
+    ],
+    "passed": true
   }
 }

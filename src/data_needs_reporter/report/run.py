@@ -267,7 +267,48 @@ def write_data_health_report(
                 min_share_pct=float(min_share_pct),
                 min_days_pct=float(min_days_pct),
             )
+            # Attach marketplace evening window metrics and guardrail evaluation
             payload["marketplace_evening_window"] = metrics
+            # Derive simple pass/fail checks aligned to validate command
+            try:
+                overall_value = float(metrics.get("overall_share_pct") or 0.0)
+            except (TypeError, ValueError):
+                overall_value = 0.0
+            try:
+                days_value = float(metrics.get("days_pct") or 0.0)
+            except (TypeError, ValueError):
+                days_value = 0.0
+            threshold_share = float(metrics.get("threshold_share_pct") or min_share_pct)
+            threshold_days = float(metrics.get("threshold_days_pct") or min_days_pct)
+            evening_checks = [
+                {
+                    "name": "slo.marketplace_evening.overall_share_pct",
+                    "metric": "overall_share_pct",
+                    "comparator": "min",
+                    "threshold": threshold_share,
+                    "value": overall_value,
+                    "passed": overall_value >= threshold_share,
+                },
+                {
+                    "name": "slo.marketplace_evening.days_pct",
+                    "metric": "days_pct",
+                    "comparator": "min",
+                    "threshold": threshold_days,
+                    "value": days_value,
+                    "passed": days_value >= threshold_days,
+                },
+            ]
+            payload["marketplace_evening_window"].update(
+                {
+                    "checks": evening_checks,
+                    "passed": all(c.get("passed", False) for c in evening_checks),
+                }
+            )
+
+    # Attach invoice aggregates guardrails snapshot for convenience in data_health
+    invoice_summary = _summarize_invoice_aggregates(config, payload)
+    if invoice_summary:
+        payload["invoice_aggregates"] = invoice_summary
 
     out_path.mkdir(parents=True, exist_ok=True)
     (out_path / "data_health.json").write_text(
@@ -980,6 +1021,49 @@ def write_exec_summary(
         exec_md_lines.append(line)
         if action["examples"]:
             exec_md_lines.append(f"   e.g., {action['examples'][0]['text']}")
+    # Append Data Health guardrail failures, if any
+    data_health_bullets: List[str] = []
+    if invoice_summary and invoice_summary.get("checks"):
+        for check in invoice_summary.get("checks", []):
+            if not isinstance(check, Mapping) or check.get("passed"):
+                continue
+            metric_name = check.get("metric") or check.get("name")
+            value_text = _format_invoice_value(metric_name, check.get("value"))
+            threshold_text = _format_invoice_value(
+                metric_name, check.get("threshold")
+            )
+            symbol = "≥" if check.get("comparator") == "min" else "≤"
+            data_health_bullets.append(
+                f"- Invoice: {metric_name} {value_text} (limit {threshold_text}, {symbol}) — FAIL"
+            )
+    if evening_summary:
+        # Evaluate pass/fail on evening metrics against thresholds for concise bullets
+        try:
+            share_val = float(evening_summary.get("overall_share_pct") or 0.0)
+        except (TypeError, ValueError):
+            share_val = 0.0
+        try:
+            days_val = float(evening_summary.get("days_pct") or 0.0)
+        except (TypeError, ValueError):
+            days_val = 0.0
+        share_thr = float(evening_summary.get("threshold_share_pct") or 0.0)
+        days_thr = float(evening_summary.get("threshold_days_pct") or 0.0)
+        if share_val < share_thr:
+            data_health_bullets.append(
+                "- Marketplace Evening: overall_share_pct "
+                f"{_format_invoice_value('overall_share_pct', share_val)} (limit "
+                f"{_format_invoice_value('overall_share_pct', share_thr)}, ≥) — FAIL"
+            )
+        if days_val < days_thr:
+            data_health_bullets.append(
+                "- Marketplace Evening: days_pct "
+                f"{_format_invoice_value('days_pct', days_val)} (limit "
+                f"{_format_invoice_value('days_pct', days_thr)}, ≥) — FAIL"
+            )
+    if data_health_bullets:
+        exec_md_lines.append("")
+        exec_md_lines.append("## Data Health")
+        exec_md_lines.extend(data_health_bullets)
     if invoice_summary:
         exec_md_lines.append("")
         exec_md_lines.append("## Invoice Aggregates")
