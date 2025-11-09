@@ -1,0 +1,535 @@
+﻿2025-11-09T19:04:50.9804815Z Current runner version: '2.329.0'
+2025-11-09T19:04:50.9838293Z ##[group]Runner Image Provisioner
+2025-11-09T19:04:50.9840124Z Hosted Compute Agent
+2025-11-09T19:04:50.9841121Z Version: 20251016.436
+2025-11-09T19:04:50.9842321Z Commit: 8ab8ac8bfd662a3739dab9fe09456aba92132568
+2025-11-09T19:04:50.9843735Z Build Date: 2025-10-15T20:44:12Z
+2025-11-09T19:04:50.9844711Z ##[endgroup]
+2025-11-09T19:04:50.9845560Z ##[group]Operating System
+2025-11-09T19:04:50.9846604Z Ubuntu
+2025-11-09T19:04:50.9847390Z 24.04.3
+2025-11-09T19:04:50.9848132Z LTS
+2025-11-09T19:04:50.9849036Z ##[endgroup]
+2025-11-09T19:04:50.9849932Z ##[group]Runner Image
+2025-11-09T19:04:50.9850838Z Image: ubuntu-24.04
+2025-11-09T19:04:50.9851811Z Version: 20251102.99.1
+2025-11-09T19:04:50.9853887Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20251102.99/images/ubuntu/Ubuntu2404-Readme.md
+2025-11-09T19:04:50.9856726Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20251102.99
+2025-11-09T19:04:50.9858474Z ##[endgroup]
+2025-11-09T19:04:50.9860484Z ##[group]GITHUB_TOKEN Permissions
+2025-11-09T19:04:50.9863619Z Contents: read
+2025-11-09T19:04:50.9864580Z Metadata: read
+2025-11-09T19:04:50.9865349Z Packages: read
+2025-11-09T19:04:50.9866130Z ##[endgroup]
+2025-11-09T19:04:50.9869325Z Secret source: Actions
+2025-11-09T19:04:50.9870938Z Prepare workflow directory
+2025-11-09T19:04:51.0433015Z Prepare all required actions
+2025-11-09T19:04:51.0489848Z Getting action download info
+2025-11-09T19:04:51.2870633Z Download action repository 'actions/checkout@v4' (SHA:08eba0b27e820071cde6df949e0beb9ba4906955)
+2025-11-09T19:04:51.3749075Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2025-11-09T19:04:51.4604623Z Download action repository 'actions/cache@v4' (SHA:0057852bfaa89a56745cba8c7296529d2fc39830)
+2025-11-09T19:04:51.6037177Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2025-11-09T19:04:52.0394591Z Complete job name: checks (ubuntu-latest, 3.11.9)
+2025-11-09T19:04:52.1167548Z ##[group]Run start=$(date +%s)
+2025-11-09T19:04:52.1168533Z [36;1mstart=$(date +%s)[0m
+2025-11-09T19:04:52.1169489Z [36;1mecho "JOB_START=$start" >> "$GITHUB_ENV"[0m
+2025-11-09T19:04:52.1170648Z [36;1mecho "LAST_TIME=$start" >> "$GITHUB_ENV"[0m
+2025-11-09T19:04:52.1171662Z [36;1m{[0m
+2025-11-09T19:04:52.1172520Z [36;1m  echo "## CI Stage Timings"[0m
+2025-11-09T19:04:52.1173440Z [36;1m  echo ""[0m
+2025-11-09T19:04:52.1174232Z [36;1m  echo "| Stage | Duration (s) |"[0m
+2025-11-09T19:04:52.1175211Z [36;1m  echo "| --- | --- |"[0m
+2025-11-09T19:04:52.1176102Z [36;1m} >> "$GITHUB_STEP_SUMMARY"[0m
+2025-11-09T19:04:52.1215592Z shell: /usr/bin/bash -e {0}
+2025-11-09T19:04:52.1216771Z env:
+2025-11-09T19:04:52.1217521Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:04:52.1218599Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:04:52.1219608Z   PYTHONHASHSEED: 1337
+2025-11-09T19:04:52.1220418Z   TEST_RNG_SEED: 1337
+2025-11-09T19:04:52.1221212Z ##[endgroup]
+2025-11-09T19:04:52.1601620Z ##[group]Run actions/checkout@v4
+2025-11-09T19:04:52.1602725Z with:
+2025-11-09T19:04:52.1603553Z   repository: benjaminshoemaker/data_graph_gap_report
+2025-11-09T19:04:52.1604912Z   token: ***
+2025-11-09T19:04:52.1605577Z   ssh-strict: true
+2025-11-09T19:04:52.1606275Z   ssh-user: git
+2025-11-09T19:04:52.1606996Z   persist-credentials: true
+2025-11-09T19:04:52.1607808Z   clean: true
+2025-11-09T19:04:52.1608528Z   sparse-checkout-cone-mode: true
+2025-11-09T19:04:52.1609425Z   fetch-depth: 1
+2025-11-09T19:04:52.1610120Z   fetch-tags: false
+2025-11-09T19:04:52.1610851Z   show-progress: true
+2025-11-09T19:04:52.1611597Z   lfs: false
+2025-11-09T19:04:52.1612371Z   submodules: false
+2025-11-09T19:04:52.1613104Z   set-safe-directory: true
+2025-11-09T19:04:52.1614030Z env:
+2025-11-09T19:04:52.1614717Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:04:52.1615684Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:04:52.1616587Z   PYTHONHASHSEED: 1337
+2025-11-09T19:04:52.1617609Z   TEST_RNG_SEED: 1337
+2025-11-09T19:04:52.1618328Z   JOB_START: 1762715092
+2025-11-09T19:04:52.1619063Z   LAST_TIME: 1762715092
+2025-11-09T19:04:52.1619770Z ##[endgroup]
+2025-11-09T19:04:52.2675957Z Syncing repository: benjaminshoemaker/data_graph_gap_report
+2025-11-09T19:04:52.2678959Z ##[group]Getting Git version info
+2025-11-09T19:04:52.2680687Z Working directory is '/home/runner/work/data_graph_gap_report/data_graph_gap_report'
+2025-11-09T19:04:52.2683340Z [command]/usr/bin/git version
+2025-11-09T19:04:52.2738387Z git version 2.51.2
+2025-11-09T19:04:52.2765686Z ##[endgroup]
+2025-11-09T19:04:52.2790148Z Temporarily overriding HOME='/home/runner/work/_temp/ec788132-8667-4943-b869-58adc4467821' before making global git config changes
+2025-11-09T19:04:52.2793277Z Adding repository directory to the temporary git global config as a safe directory
+2025-11-09T19:04:52.2796459Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/data_graph_gap_report/data_graph_gap_report
+2025-11-09T19:04:52.2832189Z Deleting the contents of '/home/runner/work/data_graph_gap_report/data_graph_gap_report'
+2025-11-09T19:04:52.2836828Z ##[group]Initializing the repository
+2025-11-09T19:04:52.2840607Z [command]/usr/bin/git init /home/runner/work/data_graph_gap_report/data_graph_gap_report
+2025-11-09T19:04:52.2942841Z hint: Using 'master' as the name for the initial branch. This default branch name
+2025-11-09T19:04:52.2946338Z hint: is subject to change. To configure the initial branch name to use in all
+2025-11-09T19:04:52.2950584Z hint: of your new repositories, which will suppress this warning, call:
+2025-11-09T19:04:52.2952984Z hint:
+2025-11-09T19:04:52.2954397Z hint: 	git config --global init.defaultBranch <name>
+2025-11-09T19:04:52.2956529Z hint:
+2025-11-09T19:04:52.2958504Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2025-11-09T19:04:52.2960906Z hint: 'development'. The just-created branch can be renamed via this command:
+2025-11-09T19:04:52.2962663Z hint:
+2025-11-09T19:04:52.2963462Z hint: 	git branch -m <name>
+2025-11-09T19:04:52.2964355Z hint:
+2025-11-09T19:04:52.2965604Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2025-11-09T19:04:52.2968158Z Initialized empty Git repository in /home/runner/work/data_graph_gap_report/data_graph_gap_report/.git/
+2025-11-09T19:04:52.2972098Z [command]/usr/bin/git remote add origin https://github.com/benjaminshoemaker/data_graph_gap_report
+2025-11-09T19:04:52.2991361Z ##[endgroup]
+2025-11-09T19:04:52.2992891Z ##[group]Disabling automatic garbage collection
+2025-11-09T19:04:52.2995036Z [command]/usr/bin/git config --local gc.auto 0
+2025-11-09T19:04:52.3025829Z ##[endgroup]
+2025-11-09T19:04:52.3028429Z ##[group]Setting up auth
+2025-11-09T19:04:52.3033596Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-11-09T19:04:52.3064269Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-11-09T19:04:52.3392380Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-11-09T19:04:52.3422863Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-11-09T19:04:52.3646001Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2025-11-09T19:04:52.3681847Z ##[endgroup]
+2025-11-09T19:04:52.3684587Z ##[group]Fetching the repository
+2025-11-09T19:04:52.3694147Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +38f602a540856ea299b39b2e73ed915f5bf83646:refs/remotes/origin/main
+2025-11-09T19:04:52.5673956Z From https://github.com/benjaminshoemaker/data_graph_gap_report
+2025-11-09T19:04:52.5676324Z  * [new ref]         38f602a540856ea299b39b2e73ed915f5bf83646 -> origin/main
+2025-11-09T19:04:52.5707780Z ##[endgroup]
+2025-11-09T19:04:52.5709194Z ##[group]Determining the checkout info
+2025-11-09T19:04:52.5710787Z ##[endgroup]
+2025-11-09T19:04:52.5715766Z [command]/usr/bin/git sparse-checkout disable
+2025-11-09T19:04:52.5756390Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2025-11-09T19:04:52.5788110Z ##[group]Checking out the ref
+2025-11-09T19:04:52.5793444Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2025-11-09T19:04:52.5905216Z Switched to a new branch 'main'
+2025-11-09T19:04:52.5908415Z branch 'main' set up to track 'origin/main'.
+2025-11-09T19:04:52.5916779Z ##[endgroup]
+2025-11-09T19:04:52.5951332Z [command]/usr/bin/git log -1 --format=%H
+2025-11-09T19:04:52.5973719Z 38f602a540856ea299b39b2e73ed915f5bf83646
+2025-11-09T19:04:52.6179239Z ##[group]Run now=$(date +%s)
+2025-11-09T19:04:52.6179950Z [36;1mnow=$(date +%s)[0m
+2025-11-09T19:04:52.6180598Z [36;1mduration=$((now - LAST_TIME))[0m
+2025-11-09T19:04:52.6181383Z [36;1mprintf 'Checkout duration: %ss\n' "$duration"[0m
+2025-11-09T19:04:52.6182443Z [36;1mprintf '| Checkout | %s |\n' "$duration" >> "$GITHUB_STEP_SUMMARY"[0m
+2025-11-09T19:04:52.6183286Z [36;1mecho "LAST_TIME=$now" >> "$GITHUB_ENV"[0m
+2025-11-09T19:04:52.6220095Z shell: /usr/bin/bash -e {0}
+2025-11-09T19:04:52.6220709Z env:
+2025-11-09T19:04:52.6221291Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:04:52.6222130Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:04:52.6222784Z   PYTHONHASHSEED: 1337
+2025-11-09T19:04:52.6223366Z   TEST_RNG_SEED: 1337
+2025-11-09T19:04:52.6223947Z   JOB_START: 1762715092
+2025-11-09T19:04:52.6224526Z   LAST_TIME: 1762715092
+2025-11-09T19:04:52.6225094Z ##[endgroup]
+2025-11-09T19:04:52.6297679Z Checkout duration: 0s
+2025-11-09T19:04:52.6407621Z ##[group]Run actions/setup-python@v5
+2025-11-09T19:04:52.6408287Z with:
+2025-11-09T19:04:52.6408837Z   python-version: 3.11.9
+2025-11-09T19:04:52.6409418Z   check-latest: false
+2025-11-09T19:04:52.6410153Z   token: ***
+2025-11-09T19:04:52.6410665Z   update-environment: true
+2025-11-09T19:04:52.6411206Z   allow-prereleases: false
+2025-11-09T19:04:52.6411736Z   freethreaded: false
+2025-11-09T19:04:52.6412566Z env:
+2025-11-09T19:04:52.6413080Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:04:52.6413678Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:04:52.6414229Z   PYTHONHASHSEED: 1337
+2025-11-09T19:04:52.6414729Z   TEST_RNG_SEED: 1337
+2025-11-09T19:04:52.6415236Z   JOB_START: 1762715092
+2025-11-09T19:04:52.6415737Z   LAST_TIME: 1762715092
+2025-11-09T19:04:52.6416262Z ##[endgroup]
+2025-11-09T19:04:52.8106015Z ##[group]Installed versions
+2025-11-09T19:04:52.8125141Z Version 3.11.9 was not found in the local cache
+2025-11-09T19:04:53.1425472Z Version 3.11.9 is available for downloading
+2025-11-09T19:04:53.1427160Z Download from "https://github.com/actions/python-versions/releases/download/3.11.9-9947079978/python-3.11.9-linux-24.04-x64.tar.gz"
+2025-11-09T19:04:53.8255236Z Extract downloaded archive
+2025-11-09T19:04:53.8392181Z [command]/usr/bin/tar xz --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/08056f87-5357-46c6-ac8b-faeb12802f27 -f /home/runner/work/_temp/002fc132-6bf8-4ff5-927d-95b3eb9b5242
+2025-11-09T19:04:55.8903073Z Execute installation script
+2025-11-09T19:04:55.8995942Z Check if Python hostedtoolcache folder exist...
+2025-11-09T19:04:55.8996785Z Create Python 3.11.9 folder
+2025-11-09T19:04:55.9009608Z Copy Python binaries to hostedtoolcache folder
+2025-11-09T19:04:56.5104052Z Create additional symlinks (Required for the UsePythonVersion Azure Pipelines task and the setup-python GitHub Action)
+2025-11-09T19:04:56.5148433Z Upgrading pip...
+2025-11-09T19:04:59.0851195Z Looking in links: /tmp/tmpzugd2s8a
+2025-11-09T19:04:59.0860175Z Requirement already satisfied: setuptools in /opt/hostedtoolcache/Python/3.11.9/x64/lib/python3.11/site-packages (65.5.0)
+2025-11-09T19:04:59.0868003Z Requirement already satisfied: pip in /opt/hostedtoolcache/Python/3.11.9/x64/lib/python3.11/site-packages (24.0)
+2025-11-09T19:05:00.5220662Z Collecting pip
+2025-11-09T19:05:00.5608788Z Downloading pip-25.3-py3-none-any.whl.metadata (4.7 kB)
+2025-11-09T19:05:00.5697792Z Downloading pip-25.3-py3-none-any.whl (1.8 MB)
+2025-11-09T19:05:00.5969778Z ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 73.3 MB/s eta 0:00:00
+2025-11-09T19:05:00.5970514Z 
+2025-11-09T19:05:00.6392449Z Installing collected packages: pip
+2025-11-09T19:05:00.6393137Z Attempting uninstall: pip
+2025-11-09T19:05:00.6410514Z Found existing installation: pip 24.0
+2025-11-09T19:05:00.6797005Z Uninstalling pip-24.0:
+2025-11-09T19:05:00.6856073Z Successfully uninstalled pip-24.0
+2025-11-09T19:05:01.4935448Z Successfully installed pip-25.3
+2025-11-09T19:05:01.5528127Z Create complete file
+2025-11-09T19:05:01.5570812Z Successfully set up CPython (3.11.9)
+2025-11-09T19:05:01.5571826Z ##[endgroup]
+2025-11-09T19:05:01.5690295Z ##[group]Run now=$(date +%s)
+2025-11-09T19:05:01.5690645Z [36;1mnow=$(date +%s)[0m
+2025-11-09T19:05:01.5690988Z [36;1mduration=$((now - LAST_TIME))[0m
+2025-11-09T19:05:01.5691371Z [36;1mprintf 'Setup Python duration: %ss\n' "$duration"[0m
+2025-11-09T19:05:01.5691875Z [36;1mprintf '| Setup Python | %s |\n' "$duration" >> "$GITHUB_STEP_SUMMARY"[0m
+2025-11-09T19:05:01.5692778Z [36;1mecho "LAST_TIME=$now" >> "$GITHUB_ENV"[0m
+2025-11-09T19:05:01.5729738Z shell: /usr/bin/bash -e {0}
+2025-11-09T19:05:01.5730032Z env:
+2025-11-09T19:05:01.5730293Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:05:01.5730620Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:05:01.5730924Z   PYTHONHASHSEED: 1337
+2025-11-09T19:05:01.5731167Z   TEST_RNG_SEED: 1337
+2025-11-09T19:05:01.5731410Z   JOB_START: 1762715092
+2025-11-09T19:05:01.5731645Z   LAST_TIME: 1762715092
+2025-11-09T19:05:01.5732129Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:01.5732670Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib/pkgconfig
+2025-11-09T19:05:01.5733194Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:01.5733679Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:01.5734156Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:01.5734643Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib
+2025-11-09T19:05:01.5735043Z ##[endgroup]
+2025-11-09T19:05:01.5804621Z Setup Python duration: 9s
+2025-11-09T19:05:01.6409290Z ##[group]Run actions/cache@v4
+2025-11-09T19:05:01.6409581Z with:
+2025-11-09T19:05:01.6409796Z   path: .venv
+~/.cache/pypoetry
+
+2025-11-09T19:05:01.6410262Z   key: poetry-Linux-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
+2025-11-09T19:05:01.6410748Z   restore-keys: poetry-Linux-
+
+2025-11-09T19:05:01.6411020Z   enableCrossOsArchive: false
+2025-11-09T19:05:01.6411283Z   fail-on-cache-miss: false
+2025-11-09T19:05:01.6411520Z   lookup-only: false
+2025-11-09T19:05:01.6411745Z   save-always: false
+2025-11-09T19:05:01.6412215Z env:
+2025-11-09T19:05:01.6412434Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:05:01.6412747Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:05:01.6413021Z   PYTHONHASHSEED: 1337
+2025-11-09T19:05:01.6413240Z   TEST_RNG_SEED: 1337
+2025-11-09T19:05:01.6413457Z   JOB_START: 1762715092
+2025-11-09T19:05:01.6413677Z   LAST_TIME: 1762715101
+2025-11-09T19:05:01.6413962Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:01.6414441Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib/pkgconfig
+2025-11-09T19:05:01.6414886Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:01.6415281Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:01.6415666Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:01.6416066Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib
+2025-11-09T19:05:01.6416395Z ##[endgroup]
+2025-11-09T19:05:01.8467175Z Cache hit for: poetry-Linux-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
+2025-11-09T19:05:02.9198290Z Received 176160768 of 449235818 (39.2%), 167.0 MBs/sec
+2025-11-09T19:05:03.9181141Z Received 402653184 of 449235818 (89.6%), 191.4 MBs/sec
+2025-11-09T19:05:04.1690710Z Received 449235818 of 449235818 (100.0%), 189.5 MBs/sec
+2025-11-09T19:05:04.1694037Z Cache Size: ~428 MB (449235818 B)
+2025-11-09T19:05:04.1790775Z [command]/usr/bin/tar -xf /home/runner/work/_temp/a22511b9-12ac-450e-b992-c640e66e003c/cache.tzst -P -C /home/runner/work/data_graph_gap_report/data_graph_gap_report --use-compress-program unzstd
+2025-11-09T19:05:05.5832867Z Cache restored successfully
+2025-11-09T19:05:05.6808358Z Cache restored from key: poetry-Linux-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
+2025-11-09T19:05:05.6947386Z ##[group]Run now=$(date +%s)
+2025-11-09T19:05:05.6947703Z [36;1mnow=$(date +%s)[0m
+2025-11-09T19:05:05.6947968Z [36;1mduration=$((now - LAST_TIME))[0m
+2025-11-09T19:05:05.6948332Z [36;1mprintf 'Poetry cache duration: %ss\n' "$duration"[0m
+2025-11-09T19:05:05.6948800Z [36;1mprintf '| Poetry Cache | %s |\n' "$duration" >> "$GITHUB_STEP_SUMMARY"[0m
+2025-11-09T19:05:05.6949332Z [36;1mecho "LAST_TIME=$now" >> "$GITHUB_ENV"[0m
+2025-11-09T19:05:05.6982887Z shell: /usr/bin/bash -e {0}
+2025-11-09T19:05:05.6983159Z env:
+2025-11-09T19:05:05.6983398Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:05:05.6983726Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:05:05.6984020Z   PYTHONHASHSEED: 1337
+2025-11-09T19:05:05.6984270Z   TEST_RNG_SEED: 1337
+2025-11-09T19:05:05.6984509Z   JOB_START: 1762715092
+2025-11-09T19:05:05.6984742Z   LAST_TIME: 1762715101
+2025-11-09T19:05:05.6985061Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:05.6985583Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib/pkgconfig
+2025-11-09T19:05:05.6986076Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:05.6986511Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:05.6986937Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:05.6987375Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib
+2025-11-09T19:05:05.6987747Z ##[endgroup]
+2025-11-09T19:05:05.7054267Z Poetry cache duration: 4s
+2025-11-09T19:05:05.7630351Z ##[group]Run actions/cache@v4
+2025-11-09T19:05:05.7630683Z with:
+2025-11-09T19:05:05.7630922Z   path: ~/.cache/pip
+2025-11-09T19:05:05.7631404Z   key: pip-Linux-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
+2025-11-09T19:05:05.7632111Z   restore-keys: pip-Linux-
+
+2025-11-09T19:05:05.7632443Z   enableCrossOsArchive: false
+2025-11-09T19:05:05.7632734Z   fail-on-cache-miss: false
+2025-11-09T19:05:05.7632993Z   lookup-only: false
+2025-11-09T19:05:05.7633233Z   save-always: false
+2025-11-09T19:05:05.7633459Z env:
+2025-11-09T19:05:05.7633686Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:05:05.7658568Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:05:05.7659002Z   PYTHONHASHSEED: 1337
+2025-11-09T19:05:05.7659311Z   TEST_RNG_SEED: 1337
+2025-11-09T19:05:05.7659641Z   JOB_START: 1762715092
+2025-11-09T19:05:05.7659980Z   LAST_TIME: 1762715105
+2025-11-09T19:05:05.7660378Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:05.7660988Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib/pkgconfig
+2025-11-09T19:05:05.7661606Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:05.7662424Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:05.7663023Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:05.7663576Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib
+2025-11-09T19:05:05.7664007Z ##[endgroup]
+2025-11-09T19:05:05.9773433Z Cache hit for: pip-Linux-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
+2025-11-09T19:05:06.3235049Z Received 42903866 of 42903866 (100.0%), 135.0 MBs/sec
+2025-11-09T19:05:06.3236087Z Cache Size: ~41 MB (42903866 B)
+2025-11-09T19:05:06.3270694Z [command]/usr/bin/tar -xf /home/runner/work/_temp/d3a9da72-6c8d-41e5-91a1-d6c708ab6952/cache.tzst -P -C /home/runner/work/data_graph_gap_report/data_graph_gap_report --use-compress-program unzstd
+2025-11-09T19:05:06.4390227Z Cache restored successfully
+2025-11-09T19:05:06.4557411Z Cache restored from key: pip-Linux-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
+2025-11-09T19:05:06.4705012Z ##[group]Run now=$(date +%s)
+2025-11-09T19:05:06.4705379Z [36;1mnow=$(date +%s)[0m
+2025-11-09T19:05:06.4705708Z [36;1mduration=$((now - LAST_TIME))[0m
+2025-11-09T19:05:06.4706130Z [36;1mprintf 'Pip cache duration: %ss\n' "$duration"[0m
+2025-11-09T19:05:06.4706657Z [36;1mprintf '| Pip Cache | %s |\n' "$duration" >> "$GITHUB_STEP_SUMMARY"[0m
+2025-11-09T19:05:06.4707158Z [36;1mecho "LAST_TIME=$now" >> "$GITHUB_ENV"[0m
+2025-11-09T19:05:06.4740706Z shell: /usr/bin/bash -e {0}
+2025-11-09T19:05:06.4741023Z env:
+2025-11-09T19:05:06.4741283Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:05:06.4741652Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:05:06.4742223Z   PYTHONHASHSEED: 1337
+2025-11-09T19:05:06.4742539Z   TEST_RNG_SEED: 1337
+2025-11-09T19:05:06.4742810Z   JOB_START: 1762715092
+2025-11-09T19:05:06.4743080Z   LAST_TIME: 1762715105
+2025-11-09T19:05:06.4743446Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:06.4744092Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib/pkgconfig
+2025-11-09T19:05:06.4744700Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:06.4745231Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:06.4745772Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:06.4746323Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib
+2025-11-09T19:05:06.4746787Z ##[endgroup]
+2025-11-09T19:05:06.4815522Z Pip cache duration: 1s
+2025-11-09T19:05:06.4848627Z ##[group]Run python -m pip install --upgrade pip
+2025-11-09T19:05:06.4849098Z [36;1mpython -m pip install --upgrade pip[0m
+2025-11-09T19:05:06.4849511Z [36;1mpip install pre-commit poetry[0m
+2025-11-09T19:05:06.4878747Z shell: /usr/bin/bash -e {0}
+2025-11-09T19:05:06.4879059Z env:
+2025-11-09T19:05:06.4879326Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:05:06.4879686Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:05:06.4880024Z   PYTHONHASHSEED: 1337
+2025-11-09T19:05:06.4880312Z   TEST_RNG_SEED: 1337
+2025-11-09T19:05:06.4880589Z   JOB_START: 1762715092
+2025-11-09T19:05:06.4880862Z   LAST_TIME: 1762715106
+2025-11-09T19:05:06.4881218Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:06.4881764Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib/pkgconfig
+2025-11-09T19:05:06.4882554Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:06.4883041Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:06.4883560Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:06.4884047Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib
+2025-11-09T19:05:06.4884452Z ##[endgroup]
+2025-11-09T19:05:06.8231797Z Requirement already satisfied: pip in /opt/hostedtoolcache/Python/3.11.9/x64/lib/python3.11/site-packages (25.3)
+2025-11-09T19:05:07.4134664Z Collecting pre-commit
+2025-11-09T19:05:07.4151406Z   Using cached pre_commit-4.4.0-py2.py3-none-any.whl.metadata (1.2 kB)
+2025-11-09T19:05:07.4482222Z Collecting poetry
+2025-11-09T19:05:07.4497055Z   Using cached poetry-2.2.1-py3-none-any.whl.metadata (7.4 kB)
+2025-11-09T19:05:07.4628254Z Collecting cfgv>=2.0.0 (from pre-commit)
+2025-11-09T19:05:07.4642440Z   Using cached cfgv-3.4.0-py2.py3-none-any.whl.metadata (8.5 kB)
+2025-11-09T19:05:07.5142152Z Collecting identify>=1.0.0 (from pre-commit)
+2025-11-09T19:05:07.5158327Z   Using cached identify-2.6.15-py2.py3-none-any.whl.metadata (4.4 kB)
+2025-11-09T19:05:07.5300463Z Collecting nodeenv>=0.11.1 (from pre-commit)
+2025-11-09T19:05:07.5314735Z   Using cached nodeenv-1.9.1-py2.py3-none-any.whl.metadata (21 kB)
+2025-11-09T19:05:07.5669293Z Collecting pyyaml>=5.1 (from pre-commit)
+2025-11-09T19:05:07.5683736Z   Using cached pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+2025-11-09T19:05:07.6127971Z Collecting virtualenv>=20.10.0 (from pre-commit)
+2025-11-09T19:05:07.6141256Z   Using cached virtualenv-20.35.4-py3-none-any.whl.metadata (4.6 kB)
+2025-11-09T19:05:07.6287384Z Collecting build<2.0.0,>=1.2.1 (from poetry)
+2025-11-09T19:05:07.6300474Z   Using cached build-1.3.0-py3-none-any.whl.metadata (5.6 kB)
+2025-11-09T19:05:07.6430695Z Collecting cachecontrol<0.15.0,>=0.14.0 (from cachecontrol[filecache]<0.15.0,>=0.14.0->poetry)
+2025-11-09T19:05:07.6446793Z   Using cached cachecontrol-0.14.3-py3-none-any.whl.metadata (3.1 kB)
+2025-11-09T19:05:07.6589371Z Collecting cleo<3.0.0,>=2.1.0 (from poetry)
+2025-11-09T19:05:07.6602345Z   Using cached cleo-2.1.0-py3-none-any.whl.metadata (12 kB)
+2025-11-09T19:05:07.7740374Z Collecting dulwich<0.25.0,>=0.24.0 (from poetry)
+2025-11-09T19:05:07.7755666Z   Using cached dulwich-0.24.8-cp311-cp311-manylinux_2_28_x86_64.whl.metadata (5.4 kB)
+2025-11-09T19:05:07.7899065Z Collecting fastjsonschema<3.0.0,>=2.18.0 (from poetry)
+2025-11-09T19:05:07.7912677Z   Using cached fastjsonschema-2.21.2-py3-none-any.whl.metadata (2.3 kB)
+2025-11-09T19:05:07.8029756Z Collecting findpython<0.8.0,>=0.6.2 (from poetry)
+2025-11-09T19:05:07.8042632Z   Using cached findpython-0.7.0-py3-none-any.whl.metadata (5.4 kB)
+2025-11-09T19:05:07.8137209Z Collecting installer<0.8.0,>=0.7.0 (from poetry)
+2025-11-09T19:05:07.8150321Z   Using cached installer-0.7.0-py3-none-any.whl.metadata (936 bytes)
+2025-11-09T19:05:07.8493853Z Collecting keyring<26.0.0,>=25.1.0 (from poetry)
+2025-11-09T19:05:07.8507049Z   Using cached keyring-25.6.0-py3-none-any.whl.metadata (20 kB)
+2025-11-09T19:05:07.8671471Z Collecting packaging>=24.2 (from poetry)
+2025-11-09T19:05:07.8684472Z   Using cached packaging-25.0-py3-none-any.whl.metadata (3.3 kB)
+2025-11-09T19:05:07.8854148Z Collecting pbs-installer<2026.0.0,>=2025.1.6 (from pbs-installer[download,install]<2026.0.0,>=2025.1.6->poetry)
+2025-11-09T19:05:07.8866635Z   Using cached pbs_installer-2025.10.31-py3-none-any.whl.metadata (992 bytes)
+2025-11-09T19:05:07.9004643Z Collecting pkginfo<2.0,>=1.12 (from poetry)
+2025-11-09T19:05:07.9018069Z   Using cached pkginfo-1.12.1.2-py3-none-any.whl.metadata (13 kB)
+2025-11-09T19:05:07.9189404Z Collecting platformdirs<5,>=3.0.0 (from poetry)
+2025-11-09T19:05:07.9202797Z   Using cached platformdirs-4.5.0-py3-none-any.whl.metadata (12 kB)
+2025-11-09T19:05:07.9359747Z Collecting poetry-core==2.2.1 (from poetry)
+2025-11-09T19:05:07.9372998Z   Using cached poetry_core-2.2.1-py3-none-any.whl.metadata (3.8 kB)
+2025-11-09T19:05:07.9454930Z Collecting pyproject-hooks<2.0.0,>=1.0.0 (from poetry)
+2025-11-09T19:05:07.9468077Z   Using cached pyproject_hooks-1.2.0-py3-none-any.whl.metadata (1.3 kB)
+2025-11-09T19:05:07.9703270Z Collecting requests<3.0,>=2.26 (from poetry)
+2025-11-09T19:05:07.9716619Z   Using cached requests-2.32.5-py3-none-any.whl.metadata (4.9 kB)
+2025-11-09T19:05:07.9824740Z Collecting requests-toolbelt<2.0.0,>=1.0.0 (from poetry)
+2025-11-09T19:05:07.9837600Z   Using cached requests_toolbelt-1.0.0-py2.py3-none-any.whl.metadata (14 kB)
+2025-11-09T19:05:07.9951732Z Collecting shellingham<2.0,>=1.5 (from poetry)
+2025-11-09T19:05:07.9965181Z   Using cached shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
+2025-11-09T19:05:08.0118798Z Collecting tomlkit<1.0.0,>=0.11.4 (from poetry)
+2025-11-09T19:05:08.0131852Z   Using cached tomlkit-0.13.3-py3-none-any.whl.metadata (2.8 kB)
+2025-11-09T19:05:08.0390157Z Collecting trove-classifiers>=2022.5.19 (from poetry)
+2025-11-09T19:05:08.0403274Z   Using cached trove_classifiers-2025.9.11.17-py3-none-any.whl.metadata (2.4 kB)
+2025-11-09T19:05:08.1264964Z Collecting msgpack<2.0.0,>=0.5.2 (from cachecontrol<0.15.0,>=0.14.0->cachecontrol[filecache]<0.15.0,>=0.14.0->poetry)
+2025-11-09T19:05:08.1278179Z   Using cached msgpack-1.1.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (8.1 kB)
+2025-11-09T19:05:08.1478282Z Collecting filelock>=3.8.0 (from cachecontrol[filecache]<0.15.0,>=0.14.0->poetry)
+2025-11-09T19:05:08.1490890Z   Using cached filelock-3.20.0-py3-none-any.whl.metadata (2.1 kB)
+2025-11-09T19:05:08.1571268Z Collecting crashtest<0.5.0,>=0.4.1 (from cleo<3.0.0,>=2.1.0->poetry)
+2025-11-09T19:05:08.1587074Z   Using cached crashtest-0.4.1-py3-none-any.whl.metadata (1.1 kB)
+2025-11-09T19:05:08.6780607Z Collecting rapidfuzz<4.0.0,>=3.0.0 (from cleo<3.0.0,>=2.1.0->poetry)
+2025-11-09T19:05:08.6796746Z   Using cached rapidfuzz-3.14.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (12 kB)
+2025-11-09T19:05:08.7020969Z Collecting urllib3>=2.2.2 (from dulwich<0.25.0,>=0.24.0->poetry)
+2025-11-09T19:05:08.7034633Z   Using cached urllib3-2.5.0-py3-none-any.whl.metadata (6.5 kB)
+2025-11-09T19:05:08.7199037Z Collecting typing_extensions>=4.6.0 (from dulwich<0.25.0,>=0.24.0->poetry)
+2025-11-09T19:05:08.7213115Z   Using cached typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+2025-11-09T19:05:08.7395424Z Collecting SecretStorage>=3.2 (from keyring<26.0.0,>=25.1.0->poetry)
+2025-11-09T19:05:08.7408446Z   Using cached secretstorage-3.4.0-py3-none-any.whl.metadata (3.9 kB)
+2025-11-09T19:05:08.7504202Z Collecting jeepney>=0.4.2 (from keyring<26.0.0,>=25.1.0->poetry)
+2025-11-09T19:05:08.7517469Z   Using cached jeepney-0.9.0-py3-none-any.whl.metadata (1.2 kB)
+2025-11-09T19:05:08.7773046Z Collecting importlib_metadata>=4.11.4 (from keyring<26.0.0,>=25.1.0->poetry)
+2025-11-09T19:05:08.7786431Z   Using cached importlib_metadata-8.7.0-py3-none-any.whl.metadata (4.8 kB)
+2025-11-09T19:05:08.7895314Z Collecting jaraco.classes (from keyring<26.0.0,>=25.1.0->poetry)
+2025-11-09T19:05:08.7908688Z   Using cached jaraco.classes-3.4.0-py3-none-any.whl.metadata (2.6 kB)
+2025-11-09T19:05:08.8063569Z Collecting jaraco.functools (from keyring<26.0.0,>=25.1.0->poetry)
+2025-11-09T19:05:08.8076988Z   Using cached jaraco_functools-4.3.0-py3-none-any.whl.metadata (2.9 kB)
+2025-11-09T19:05:08.8199568Z Collecting jaraco.context (from keyring<26.0.0,>=25.1.0->poetry)
+2025-11-09T19:05:08.8212782Z   Using cached jaraco.context-6.0.1-py3-none-any.whl.metadata (4.1 kB)
+2025-11-09T19:05:08.8413811Z Collecting httpx<1,>=0.27.0 (from pbs-installer[download,install]<2026.0.0,>=2025.1.6->poetry)
+2025-11-09T19:05:08.8426982Z   Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2025-11-09T19:05:08.9106319Z Collecting zstandard>=0.21.0 (from pbs-installer[download,install]<2026.0.0,>=2025.1.6->poetry)
+2025-11-09T19:05:08.9120882Z   Using cached zstandard-0.25.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (3.3 kB)
+2025-11-09T19:05:08.9292254Z Collecting anyio (from httpx<1,>=0.27.0->pbs-installer[download,install]<2026.0.0,>=2025.1.6->poetry)
+2025-11-09T19:05:08.9305478Z   Using cached anyio-4.11.0-py3-none-any.whl.metadata (4.1 kB)
+2025-11-09T19:05:08.9499843Z Collecting certifi (from httpx<1,>=0.27.0->pbs-installer[download,install]<2026.0.0,>=2025.1.6->poetry)
+2025-11-09T19:05:08.9513316Z   Using cached certifi-2025.10.5-py3-none-any.whl.metadata (2.5 kB)
+2025-11-09T19:05:08.9673150Z Collecting httpcore==1.* (from httpx<1,>=0.27.0->pbs-installer[download,install]<2026.0.0,>=2025.1.6->poetry)
+2025-11-09T19:05:08.9686592Z   Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2025-11-09T19:05:08.9808062Z Collecting idna (from httpx<1,>=0.27.0->pbs-installer[download,install]<2026.0.0,>=2025.1.6->poetry)
+2025-11-09T19:05:08.9820815Z   Using cached idna-3.11-py3-none-any.whl.metadata (8.4 kB)
+2025-11-09T19:05:08.9921158Z Collecting h11>=0.16 (from httpcore==1.*->httpx<1,>=0.27.0->pbs-installer[download,install]<2026.0.0,>=2025.1.6->poetry)
+2025-11-09T19:05:08.9933906Z   Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2025-11-09T19:05:09.0733022Z Collecting charset_normalizer<4,>=2 (from requests<3.0,>=2.26->poetry)
+2025-11-09T19:05:09.0747665Z   Using cached charset_normalizer-3.4.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (37 kB)
+2025-11-09T19:05:09.1308553Z Collecting zipp>=3.20 (from importlib_metadata>=4.11.4->keyring<26.0.0,>=25.1.0->poetry)
+2025-11-09T19:05:09.1321473Z   Using cached zipp-3.23.0-py3-none-any.whl.metadata (3.6 kB)
+2025-11-09T19:05:09.3601041Z Collecting cryptography>=2.0 (from SecretStorage>=3.2->keyring<26.0.0,>=25.1.0->poetry)
+2025-11-09T19:05:09.3616660Z   Using cached cryptography-46.0.3-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (5.7 kB)
+2025-11-09T19:05:09.4653504Z Collecting cffi>=2.0.0 (from cryptography>=2.0->SecretStorage>=3.2->keyring<26.0.0,>=25.1.0->poetry)
+2025-11-09T19:05:09.4667731Z   Using cached cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.6 kB)
+2025-11-09T19:05:09.4778144Z Collecting pycparser (from cffi>=2.0.0->cryptography>=2.0->SecretStorage>=3.2->keyring<26.0.0,>=25.1.0->poetry)
+2025-11-09T19:05:09.4791359Z   Using cached pycparser-2.23-py3-none-any.whl.metadata (993 bytes)
+2025-11-09T19:05:09.4918289Z Collecting distlib<1,>=0.3.7 (from virtualenv>=20.10.0->pre-commit)
+2025-11-09T19:05:09.4931473Z   Using cached distlib-0.4.0-py2.py3-none-any.whl.metadata (5.2 kB)
+2025-11-09T19:05:09.5215282Z Collecting sniffio>=1.1 (from anyio->httpx<1,>=0.27.0->pbs-installer[download,install]<2026.0.0,>=2025.1.6->poetry)
+2025-11-09T19:05:09.5228157Z   Using cached sniffio-1.3.1-py3-none-any.whl.metadata (3.9 kB)
+2025-11-09T19:05:09.5445345Z Collecting more-itertools (from jaraco.classes->keyring<26.0.0,>=25.1.0->poetry)
+2025-11-09T19:05:09.5458463Z   Using cached more_itertools-10.8.0-py3-none-any.whl.metadata (39 kB)
+2025-11-09T19:05:09.5582798Z Collecting backports.tarfile (from jaraco.context->keyring<26.0.0,>=25.1.0->poetry)
+2025-11-09T19:05:09.5596163Z   Using cached backports.tarfile-1.2.0-py3-none-any.whl.metadata (2.0 kB)
+2025-11-09T19:05:09.5699141Z Using cached pre_commit-4.4.0-py2.py3-none-any.whl (226 kB)
+2025-11-09T19:05:09.5713495Z Using cached poetry-2.2.1-py3-none-any.whl (281 kB)
+2025-11-09T19:05:09.5729131Z Using cached poetry_core-2.2.1-py3-none-any.whl (338 kB)
+2025-11-09T19:05:09.5744669Z Using cached build-1.3.0-py3-none-any.whl (23 kB)
+2025-11-09T19:05:09.5758314Z Using cached cachecontrol-0.14.3-py3-none-any.whl (21 kB)
+2025-11-09T19:05:09.5771398Z Using cached cleo-2.1.0-py3-none-any.whl (78 kB)
+2025-11-09T19:05:09.5785229Z Using cached crashtest-0.4.1-py3-none-any.whl (7.6 kB)
+2025-11-09T19:05:09.5798582Z Using cached dulwich-0.24.8-cp311-cp311-manylinux_2_28_x86_64.whl (1.3 MB)
+2025-11-09T19:05:09.5822161Z Using cached fastjsonschema-2.21.2-py3-none-any.whl (24 kB)
+2025-11-09T19:05:09.5835335Z Using cached findpython-0.7.0-py3-none-any.whl (21 kB)
+2025-11-09T19:05:09.5848527Z Using cached installer-0.7.0-py3-none-any.whl (453 kB)
+2025-11-09T19:05:09.5864654Z Using cached keyring-25.6.0-py3-none-any.whl (39 kB)
+2025-11-09T19:05:09.5878436Z Using cached msgpack-1.1.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (426 kB)
+2025-11-09T19:05:09.5894920Z Using cached pbs_installer-2025.10.31-py3-none-any.whl (66 kB)
+2025-11-09T19:05:09.5908317Z Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+2025-11-09T19:05:09.5922213Z Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+2025-11-09T19:05:09.5935824Z Using cached pkginfo-1.12.1.2-py3-none-any.whl (32 kB)
+2025-11-09T19:05:09.5948922Z Using cached platformdirs-4.5.0-py3-none-any.whl (18 kB)
+2025-11-09T19:05:09.5962349Z Using cached pyproject_hooks-1.2.0-py3-none-any.whl (10 kB)
+2025-11-09T19:05:09.5976221Z Using cached rapidfuzz-3.14.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (3.2 MB)
+2025-11-09T19:05:09.6013301Z Using cached requests-2.32.5-py3-none-any.whl (64 kB)
+2025-11-09T19:05:09.6028025Z Using cached charset_normalizer-3.4.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (151 kB)
+2025-11-09T19:05:09.6042501Z Using cached idna-3.11-py3-none-any.whl (71 kB)
+2025-11-09T19:05:09.6056316Z Using cached requests_toolbelt-1.0.0-py2.py3-none-any.whl (54 kB)
+2025-11-09T19:05:09.6069814Z Using cached shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+2025-11-09T19:05:09.6083206Z Using cached tomlkit-0.13.3-py3-none-any.whl (38 kB)
+2025-11-09T19:05:09.6096424Z Using cached urllib3-2.5.0-py3-none-any.whl (129 kB)
+2025-11-09T19:05:09.6110229Z Using cached certifi-2025.10.5-py3-none-any.whl (163 kB)
+2025-11-09T19:05:09.6124242Z Using cached cfgv-3.4.0-py2.py3-none-any.whl (7.2 kB)
+2025-11-09T19:05:09.6137128Z Using cached filelock-3.20.0-py3-none-any.whl (16 kB)
+2025-11-09T19:05:09.6150194Z Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+2025-11-09T19:05:09.6163521Z Using cached identify-2.6.15-py2.py3-none-any.whl (99 kB)
+2025-11-09T19:05:09.6177090Z Using cached importlib_metadata-8.7.0-py3-none-any.whl (27 kB)
+2025-11-09T19:05:09.6190326Z Using cached jeepney-0.9.0-py3-none-any.whl (49 kB)
+2025-11-09T19:05:09.6203807Z Using cached nodeenv-1.9.1-py2.py3-none-any.whl (22 kB)
+2025-11-09T19:05:09.6216819Z Using cached packaging-25.0-py3-none-any.whl (66 kB)
+2025-11-09T19:05:09.6230692Z Using cached pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (806 kB)
+2025-11-09T19:05:09.6249695Z Using cached secretstorage-3.4.0-py3-none-any.whl (15 kB)
+2025-11-09T19:05:09.6263224Z Using cached cryptography-46.0.3-cp311-abi3-manylinux_2_34_x86_64.whl (4.5 MB)
+2025-11-09T19:05:09.6310280Z Using cached cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (215 kB)
+2025-11-09T19:05:09.6324841Z Using cached trove_classifiers-2025.9.11.17-py3-none-any.whl (14 kB)
+2025-11-09T19:05:09.6338001Z Using cached typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+2025-11-09T19:05:09.6351468Z Using cached virtualenv-20.35.4-py3-none-any.whl (6.0 MB)
+2025-11-09T19:05:09.6410773Z Using cached distlib-0.4.0-py2.py3-none-any.whl (469 kB)
+2025-11-09T19:05:09.6428329Z Using cached zipp-3.23.0-py3-none-any.whl (10 kB)
+2025-11-09T19:05:09.6441814Z Using cached zstandard-0.25.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.6 MB)
+2025-11-09T19:05:09.6497106Z Using cached anyio-4.11.0-py3-none-any.whl (109 kB)
+2025-11-09T19:05:09.6511560Z Using cached sniffio-1.3.1-py3-none-any.whl (10 kB)
+2025-11-09T19:05:09.6524820Z Using cached jaraco.classes-3.4.0-py3-none-any.whl (6.8 kB)
+2025-11-09T19:05:09.6538171Z Using cached jaraco.context-6.0.1-py3-none-any.whl (6.8 kB)
+2025-11-09T19:05:09.6551179Z Using cached backports.tarfile-1.2.0-py3-none-any.whl (30 kB)
+2025-11-09T19:05:09.6564540Z Using cached jaraco_functools-4.3.0-py3-none-any.whl (10 kB)
+2025-11-09T19:05:09.6577640Z Using cached more_itertools-10.8.0-py3-none-any.whl (69 kB)
+2025-11-09T19:05:09.6591053Z Using cached pycparser-2.23-py3-none-any.whl (118 kB)
+2025-11-09T19:05:09.7782832Z Installing collected packages: trove-classifiers, fastjsonschema, distlib, zstandard, zipp, urllib3, typing_extensions, tomlkit, sniffio, shellingham, rapidfuzz, pyyaml, pyproject-hooks, pycparser, poetry-core, platformdirs, pkginfo, pbs-installer, packaging, nodeenv, msgpack, more-itertools, jeepney, installer, idna, identify, h11, filelock, crashtest, charset_normalizer, cfgv, certifi, backports.tarfile, virtualenv, requests, jaraco.functools, jaraco.context, jaraco.classes, importlib_metadata, httpcore, findpython, dulwich, cleo, cffi, build, anyio, requests-toolbelt, pre-commit, httpx, cryptography, cachecontrol, SecretStorage, keyring, poetry
+2025-11-09T19:05:12.4394256Z 
+2025-11-09T19:05:12.4429440Z Successfully installed SecretStorage-3.4.0 anyio-4.11.0 backports.tarfile-1.2.0 build-1.3.0 cachecontrol-0.14.3 certifi-2025.10.5 cffi-2.0.0 cfgv-3.4.0 charset_normalizer-3.4.4 cleo-2.1.0 crashtest-0.4.1 cryptography-46.0.3 distlib-0.4.0 dulwich-0.24.8 fastjsonschema-2.21.2 filelock-3.20.0 findpython-0.7.0 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 identify-2.6.15 idna-3.11 importlib_metadata-8.7.0 installer-0.7.0 jaraco.classes-3.4.0 jaraco.context-6.0.1 jaraco.functools-4.3.0 jeepney-0.9.0 keyring-25.6.0 more-itertools-10.8.0 msgpack-1.1.2 nodeenv-1.9.1 packaging-25.0 pbs-installer-2025.10.31 pkginfo-1.12.1.2 platformdirs-4.5.0 poetry-2.2.1 poetry-core-2.2.1 pre-commit-4.4.0 pycparser-2.23 pyproject-hooks-1.2.0 pyyaml-6.0.3 rapidfuzz-3.14.3 requests-2.32.5 requests-toolbelt-1.0.0 shellingham-1.5.4 sniffio-1.3.1 tomlkit-0.13.3 trove-classifiers-2025.9.11.17 typing_extensions-4.15.0 urllib3-2.5.0 virtualenv-20.35.4 zipp-3.23.0 zstandard-0.25.0
+2025-11-09T19:05:12.7169635Z ##[error]The operation was canceled.
+2025-11-09T19:05:12.7234955Z ##[group]Run now=$(date +%s)
+2025-11-09T19:05:12.7235249Z [36;1mnow=$(date +%s)[0m
+2025-11-09T19:05:12.7235500Z [36;1mtotal=$((now - JOB_START))[0m
+2025-11-09T19:05:12.7235812Z [36;1mprintf 'Total job duration: %ss\n' "$total"[0m
+2025-11-09T19:05:12.7236207Z [36;1mprintf '| Overall | %s |\n' "$total" >> "$GITHUB_STEP_SUMMARY"[0m
+2025-11-09T19:05:12.7269576Z shell: /usr/bin/bash -e {0}
+2025-11-09T19:05:12.7269839Z env:
+2025-11-09T19:05:12.7270067Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:05:12.7270378Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:05:12.7270681Z   PYTHONHASHSEED: 1337
+2025-11-09T19:05:12.7270944Z   TEST_RNG_SEED: 1337
+2025-11-09T19:05:12.7271211Z   JOB_START: 1762715092
+2025-11-09T19:05:12.7271462Z   LAST_TIME: 1762715106
+2025-11-09T19:05:12.7271792Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:12.7272650Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib/pkgconfig
+2025-11-09T19:05:12.7273173Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:12.7273614Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:12.7274045Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:12.7274487Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib
+2025-11-09T19:05:12.7274864Z ##[endgroup]
+2025-11-09T19:05:12.7344170Z Total job duration: 20s
+2025-11-09T19:05:12.7413679Z Post job cleanup.
+2025-11-09T19:05:12.8430818Z [command]/usr/bin/git version
+2025-11-09T19:05:12.8469538Z git version 2.51.2
+2025-11-09T19:05:12.8513040Z Temporarily overriding HOME='/home/runner/work/_temp/7fd25c07-619d-437e-b8f0-ca03ce95707f' before making global git config changes
+2025-11-09T19:05:12.8514332Z Adding repository directory to the temporary git global config as a safe directory
+2025-11-09T19:05:12.8519293Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/data_graph_gap_report/data_graph_gap_report
+2025-11-09T19:05:12.8558381Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-11-09T19:05:12.8591616Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-11-09T19:05:12.8827248Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-11-09T19:05:12.8849350Z http.https://github.com/.extraheader
+2025-11-09T19:05:12.8862681Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2025-11-09T19:05:12.8895306Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-11-09T19:05:12.9266384Z Cleaning up orphan processes

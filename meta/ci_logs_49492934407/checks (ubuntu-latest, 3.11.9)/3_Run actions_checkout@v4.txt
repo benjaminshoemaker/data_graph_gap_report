@@ -1,0 +1,76 @@
+﻿2025-11-09T19:04:52.1601590Z ##[group]Run actions/checkout@v4
+2025-11-09T19:04:52.1602718Z with:
+2025-11-09T19:04:52.1603547Z   repository: benjaminshoemaker/data_graph_gap_report
+2025-11-09T19:04:52.1604906Z   token: ***
+2025-11-09T19:04:52.1605573Z   ssh-strict: true
+2025-11-09T19:04:52.1606271Z   ssh-user: git
+2025-11-09T19:04:52.1606992Z   persist-credentials: true
+2025-11-09T19:04:52.1607803Z   clean: true
+2025-11-09T19:04:52.1608523Z   sparse-checkout-cone-mode: true
+2025-11-09T19:04:52.1609421Z   fetch-depth: 1
+2025-11-09T19:04:52.1610116Z   fetch-tags: false
+2025-11-09T19:04:52.1610847Z   show-progress: true
+2025-11-09T19:04:52.1611593Z   lfs: false
+2025-11-09T19:04:52.1612365Z   submodules: false
+2025-11-09T19:04:52.1613100Z   set-safe-directory: true
+2025-11-09T19:04:52.1614025Z env:
+2025-11-09T19:04:52.1614712Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:04:52.1615672Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:04:52.1616582Z   PYTHONHASHSEED: 1337
+2025-11-09T19:04:52.1617571Z   TEST_RNG_SEED: 1337
+2025-11-09T19:04:52.1618324Z   JOB_START: 1762715092
+2025-11-09T19:04:52.1619058Z   LAST_TIME: 1762715092
+2025-11-09T19:04:52.1619759Z ##[endgroup]
+2025-11-09T19:04:52.2675883Z Syncing repository: benjaminshoemaker/data_graph_gap_report
+2025-11-09T19:04:52.2678931Z ##[group]Getting Git version info
+2025-11-09T19:04:52.2680677Z Working directory is '/home/runner/work/data_graph_gap_report/data_graph_gap_report'
+2025-11-09T19:04:52.2683327Z [command]/usr/bin/git version
+2025-11-09T19:04:52.2738358Z git version 2.51.2
+2025-11-09T19:04:52.2765664Z ##[endgroup]
+2025-11-09T19:04:52.2790116Z Temporarily overriding HOME='/home/runner/work/_temp/ec788132-8667-4943-b869-58adc4467821' before making global git config changes
+2025-11-09T19:04:52.2793264Z Adding repository directory to the temporary git global config as a safe directory
+2025-11-09T19:04:52.2796441Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/data_graph_gap_report/data_graph_gap_report
+2025-11-09T19:04:52.2832111Z Deleting the contents of '/home/runner/work/data_graph_gap_report/data_graph_gap_report'
+2025-11-09T19:04:52.2836801Z ##[group]Initializing the repository
+2025-11-09T19:04:52.2840577Z [command]/usr/bin/git init /home/runner/work/data_graph_gap_report/data_graph_gap_report
+2025-11-09T19:04:52.2942810Z hint: Using 'master' as the name for the initial branch. This default branch name
+2025-11-09T19:04:52.2946319Z hint: is subject to change. To configure the initial branch name to use in all
+2025-11-09T19:04:52.2950567Z hint: of your new repositories, which will suppress this warning, call:
+2025-11-09T19:04:52.2952971Z hint:
+2025-11-09T19:04:52.2954381Z hint: 	git config --global init.defaultBranch <name>
+2025-11-09T19:04:52.2956509Z hint:
+2025-11-09T19:04:52.2958494Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2025-11-09T19:04:52.2960901Z hint: 'development'. The just-created branch can be renamed via this command:
+2025-11-09T19:04:52.2962654Z hint:
+2025-11-09T19:04:52.2963431Z hint: 	git branch -m <name>
+2025-11-09T19:04:52.2964350Z hint:
+2025-11-09T19:04:52.2965599Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2025-11-09T19:04:52.2968152Z Initialized empty Git repository in /home/runner/work/data_graph_gap_report/data_graph_gap_report/.git/
+2025-11-09T19:04:52.2972090Z [command]/usr/bin/git remote add origin https://github.com/benjaminshoemaker/data_graph_gap_report
+2025-11-09T19:04:52.2991339Z ##[endgroup]
+2025-11-09T19:04:52.2992883Z ##[group]Disabling automatic garbage collection
+2025-11-09T19:04:52.2995009Z [command]/usr/bin/git config --local gc.auto 0
+2025-11-09T19:04:52.3025797Z ##[endgroup]
+2025-11-09T19:04:52.3028408Z ##[group]Setting up auth
+2025-11-09T19:04:52.3033567Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-11-09T19:04:52.3063994Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-11-09T19:04:52.3392349Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-11-09T19:04:52.3422823Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-11-09T19:04:52.3645970Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2025-11-09T19:04:52.3681813Z ##[endgroup]
+2025-11-09T19:04:52.3684556Z ##[group]Fetching the repository
+2025-11-09T19:04:52.3694108Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +38f602a540856ea299b39b2e73ed915f5bf83646:refs/remotes/origin/main
+2025-11-09T19:04:52.5673821Z From https://github.com/benjaminshoemaker/data_graph_gap_report
+2025-11-09T19:04:52.5676252Z  * [new ref]         38f602a540856ea299b39b2e73ed915f5bf83646 -> origin/main
+2025-11-09T19:04:52.5707747Z ##[endgroup]
+2025-11-09T19:04:52.5709181Z ##[group]Determining the checkout info
+2025-11-09T19:04:52.5710781Z ##[endgroup]
+2025-11-09T19:04:52.5715748Z [command]/usr/bin/git sparse-checkout disable
+2025-11-09T19:04:52.5756358Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2025-11-09T19:04:52.5788084Z ##[group]Checking out the ref
+2025-11-09T19:04:52.5793409Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2025-11-09T19:04:52.5905185Z Switched to a new branch 'main'
+2025-11-09T19:04:52.5908388Z branch 'main' set up to track 'origin/main'.
+2025-11-09T19:04:52.5916747Z ##[endgroup]
+2025-11-09T19:04:52.5951303Z [command]/usr/bin/git log -1 --format=%H
+2025-11-09T19:04:52.5973692Z 38f602a540856ea299b39b2e73ed915f5bf83646

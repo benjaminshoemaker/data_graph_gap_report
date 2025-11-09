@@ -1,0 +1,21 @@
+﻿2025-11-09T19:05:03.4822030Z ##[group]Run now=$(date +%s)
+2025-11-09T19:05:03.4822240Z [36;1mnow=$(date +%s)[0m
+2025-11-09T19:05:03.4822400Z [36;1mduration=$((now - LAST_TIME))[0m
+2025-11-09T19:05:03.4822630Z [36;1mprintf 'Tool install duration: %ss\n' "$duration"[0m
+2025-11-09T19:05:03.4822950Z [36;1mprintf '| Install Tools | %s |\n' "$duration" >> "$GITHUB_STEP_SUMMARY"[0m
+2025-11-09T19:05:03.4823260Z [36;1mecho "LAST_TIME=$now" >> "$GITHUB_ENV"[0m
+2025-11-09T19:05:03.4856650Z shell: /bin/bash -e {0}
+2025-11-09T19:05:03.4856870Z env:
+2025-11-09T19:05:03.4857050Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:05:03.4857240Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:05:03.4857400Z   PYTHONHASHSEED: 1337
+2025-11-09T19:05:03.4857630Z   TEST_RNG_SEED: 1337
+2025-11-09T19:05:03.4857820Z   JOB_START: 1762715091
+2025-11-09T19:05:03.4858020Z   LAST_TIME: 1762715096
+2025-11-09T19:05:03.4858240Z   pythonLocation: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:05:03.4858660Z   PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.11.9/arm64/lib/pkgconfig
+2025-11-09T19:05:03.4859100Z   Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:05:03.4859410Z   Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:05:03.4859740Z   Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:05:03.4859970Z ##[endgroup]
+2025-11-09T19:05:03.5394190Z Tool install duration: 7s

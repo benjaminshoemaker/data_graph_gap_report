@@ -1,0 +1,77 @@
+﻿2025-11-09T19:04:51.7450610Z ##[group]Run actions/checkout@v4
+2025-11-09T19:04:51.7451130Z with:
+2025-11-09T19:04:51.7451460Z   repository: benjaminshoemaker/data_graph_gap_report
+2025-11-09T19:04:51.7451980Z   token: ***
+2025-11-09T19:04:51.7452370Z   ssh-strict: true
+2025-11-09T19:04:51.7452650Z   ssh-user: git
+2025-11-09T19:04:51.7452920Z   persist-credentials: true
+2025-11-09T19:04:51.7453240Z   clean: true
+2025-11-09T19:04:51.7453510Z   sparse-checkout-cone-mode: true
+2025-11-09T19:04:51.7453850Z   fetch-depth: 1
+2025-11-09T19:04:51.7454120Z   fetch-tags: false
+2025-11-09T19:04:51.7454420Z   show-progress: true
+2025-11-09T19:04:51.7454690Z   lfs: false
+2025-11-09T19:04:51.7454960Z   submodules: false
+2025-11-09T19:04:51.7455240Z   set-safe-directory: true
+2025-11-09T19:04:51.7455630Z env:
+2025-11-09T19:04:51.7455900Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:04:51.7456260Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:04:51.7456610Z   PYTHONHASHSEED: 1337
+2025-11-09T19:04:51.7457440Z   TEST_RNG_SEED: 1337
+2025-11-09T19:04:51.7457760Z   JOB_START: 1762715091
+2025-11-09T19:04:51.7458040Z   LAST_TIME: 1762715091
+2025-11-09T19:04:51.7458320Z ##[endgroup]
+2025-11-09T19:04:52.0627930Z Syncing repository: benjaminshoemaker/data_graph_gap_report
+2025-11-09T19:04:52.0629540Z ##[group]Getting Git version info
+2025-11-09T19:04:52.0630110Z Working directory is '/Users/runner/work/data_graph_gap_report/data_graph_gap_report'
+2025-11-09T19:04:52.0630960Z [command]/opt/homebrew/bin/git version
+2025-11-09T19:04:52.0935590Z git version 2.50.1
+2025-11-09T19:04:52.0961530Z ##[endgroup]
+2025-11-09T19:04:52.0972960Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/9ec7b304-01d3-47ab-ba00-d1a4f9b48dc1/.gitconfig'
+2025-11-09T19:04:52.0979220Z Temporarily overriding HOME='/Users/runner/work/_temp/9ec7b304-01d3-47ab-ba00-d1a4f9b48dc1' before making global git config changes
+2025-11-09T19:04:52.0980130Z Adding repository directory to the temporary git global config as a safe directory
+2025-11-09T19:04:52.0983250Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/data_graph_gap_report/data_graph_gap_report
+2025-11-09T19:04:52.1071410Z Deleting the contents of '/Users/runner/work/data_graph_gap_report/data_graph_gap_report'
+2025-11-09T19:04:52.1074470Z ##[group]Initializing the repository
+2025-11-09T19:04:52.1078580Z [command]/opt/homebrew/bin/git init /Users/runner/work/data_graph_gap_report/data_graph_gap_report
+2025-11-09T19:04:52.1380220Z hint: Using 'master' as the name for the initial branch. This default branch name
+2025-11-09T19:04:52.1397810Z hint: is subject to change. To configure the initial branch name to use in all
+2025-11-09T19:04:52.1399640Z hint: of your new repositories, which will suppress this warning, call:
+2025-11-09T19:04:52.1400930Z hint:
+2025-11-09T19:04:52.1402060Z hint: 	git config --global init.defaultBranch <name>
+2025-11-09T19:04:52.1403270Z hint:
+2025-11-09T19:04:52.1404480Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2025-11-09T19:04:52.1406590Z hint: 'development'. The just-created branch can be renamed via this command:
+2025-11-09T19:04:52.1408180Z hint:
+2025-11-09T19:04:52.1409070Z hint: 	git branch -m <name>
+2025-11-09T19:04:52.1410090Z hint:
+2025-11-09T19:04:52.1435180Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2025-11-09T19:04:52.1436200Z Initialized empty Git repository in /Users/runner/work/data_graph_gap_report/data_graph_gap_report/.git/
+2025-11-09T19:04:52.1456230Z [command]/opt/homebrew/bin/git remote add origin https://github.com/benjaminshoemaker/data_graph_gap_report
+2025-11-09T19:04:52.1513810Z ##[endgroup]
+2025-11-09T19:04:52.1514700Z ##[group]Disabling automatic garbage collection
+2025-11-09T19:04:52.1515270Z [command]/opt/homebrew/bin/git config --local gc.auto 0
+2025-11-09T19:04:52.1577490Z ##[endgroup]
+2025-11-09T19:04:52.1578010Z ##[group]Setting up auth
+2025-11-09T19:04:52.1582800Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-11-09T19:04:52.1633730Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-11-09T19:04:52.2626390Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-11-09T19:04:52.2687870Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-11-09T19:04:52.3343120Z [command]/opt/homebrew/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2025-11-09T19:04:52.3405100Z ##[endgroup]
+2025-11-09T19:04:52.3406010Z ##[group]Fetching the repository
+2025-11-09T19:04:52.3410660Z [command]/opt/homebrew/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +38f602a540856ea299b39b2e73ed915f5bf83646:refs/remotes/origin/main
+2025-11-09T19:04:53.1788470Z From https://github.com/benjaminshoemaker/data_graph_gap_report
+2025-11-09T19:04:53.1789610Z  * [new ref]         38f602a540856ea299b39b2e73ed915f5bf83646 -> origin/main
+2025-11-09T19:04:53.1893360Z ##[endgroup]
+2025-11-09T19:04:53.1894230Z ##[group]Determining the checkout info
+2025-11-09T19:04:53.1895130Z ##[endgroup]
+2025-11-09T19:04:53.1900430Z [command]/opt/homebrew/bin/git sparse-checkout disable
+2025-11-09T19:04:53.1983470Z [command]/opt/homebrew/bin/git config --local --unset-all extensions.worktreeConfig
+2025-11-09T19:04:53.2058380Z ##[group]Checking out the ref
+2025-11-09T19:04:53.2062350Z [command]/opt/homebrew/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2025-11-09T19:04:53.2279290Z Switched to a new branch 'main'
+2025-11-09T19:04:53.2283470Z branch 'main' set up to track 'origin/main'.
+2025-11-09T19:04:53.2287010Z ##[endgroup]
+2025-11-09T19:04:53.2359940Z [command]/opt/homebrew/bin/git log -1 --format=%H
+2025-11-09T19:04:53.2416290Z 38f602a540856ea299b39b2e73ed915f5bf83646

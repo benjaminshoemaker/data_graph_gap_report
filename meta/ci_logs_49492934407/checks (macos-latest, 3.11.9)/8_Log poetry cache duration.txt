@@ -1,0 +1,21 @@
+﻿2025-11-09T19:04:56.4338050Z ##[group]Run now=$(date +%s)
+2025-11-09T19:04:56.4338320Z [36;1mnow=$(date +%s)[0m
+2025-11-09T19:04:56.4338520Z [36;1mduration=$((now - LAST_TIME))[0m
+2025-11-09T19:04:56.4338810Z [36;1mprintf 'Poetry cache duration: %ss\n' "$duration"[0m
+2025-11-09T19:04:56.4339170Z [36;1mprintf '| Poetry Cache | %s |\n' "$duration" >> "$GITHUB_STEP_SUMMARY"[0m
+2025-11-09T19:04:56.4339470Z [36;1mecho "LAST_TIME=$now" >> "$GITHUB_ENV"[0m
+2025-11-09T19:04:56.4379190Z shell: /bin/bash -e {0}
+2025-11-09T19:04:56.4439820Z env:
+2025-11-09T19:04:56.4440140Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:04:56.4440410Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:04:56.4440640Z   PYTHONHASHSEED: 1337
+2025-11-09T19:04:56.4440810Z   TEST_RNG_SEED: 1337
+2025-11-09T19:04:56.4440950Z   JOB_START: 1762715091
+2025-11-09T19:04:56.4441090Z   LAST_TIME: 1762715093
+2025-11-09T19:04:56.4441310Z   pythonLocation: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:04:56.4441720Z   PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.11.9/arm64/lib/pkgconfig
+2025-11-09T19:04:56.4442150Z   Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:04:56.4442470Z   Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:04:56.4442810Z   Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:04:56.4449800Z ##[endgroup]
+2025-11-09T19:04:56.4876170Z Poetry cache duration: 3s

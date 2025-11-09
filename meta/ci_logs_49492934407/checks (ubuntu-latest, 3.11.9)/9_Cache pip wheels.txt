@@ -1,0 +1,30 @@
+﻿2025-11-09T19:05:05.7630338Z ##[group]Run actions/cache@v4
+2025-11-09T19:05:05.7630680Z with:
+2025-11-09T19:05:05.7630919Z   path: ~/.cache/pip
+2025-11-09T19:05:05.7631401Z   key: pip-Linux-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
+2025-11-09T19:05:05.7632103Z   restore-keys: pip-Linux-
+
+2025-11-09T19:05:05.7632441Z   enableCrossOsArchive: false
+2025-11-09T19:05:05.7632732Z   fail-on-cache-miss: false
+2025-11-09T19:05:05.7632991Z   lookup-only: false
+2025-11-09T19:05:05.7633231Z   save-always: false
+2025-11-09T19:05:05.7633457Z env:
+2025-11-09T19:05:05.7633678Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:05:05.7658554Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:05:05.7658998Z   PYTHONHASHSEED: 1337
+2025-11-09T19:05:05.7659306Z   TEST_RNG_SEED: 1337
+2025-11-09T19:05:05.7659636Z   JOB_START: 1762715092
+2025-11-09T19:05:05.7659976Z   LAST_TIME: 1762715105
+2025-11-09T19:05:05.7660374Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:05.7660926Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib/pkgconfig
+2025-11-09T19:05:05.7661600Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:05.7662418Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:05.7663019Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:05.7663572Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib
+2025-11-09T19:05:05.7664003Z ##[endgroup]
+2025-11-09T19:05:05.9773405Z Cache hit for: pip-Linux-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
+2025-11-09T19:05:06.3234994Z Received 42903866 of 42903866 (100.0%), 135.0 MBs/sec
+2025-11-09T19:05:06.3236074Z Cache Size: ~41 MB (42903866 B)
+2025-11-09T19:05:06.3270675Z [command]/usr/bin/tar -xf /home/runner/work/_temp/d3a9da72-6c8d-41e5-91a1-d6c708ab6952/cache.tzst -P -C /home/runner/work/data_graph_gap_report/data_graph_gap_report --use-compress-program unzstd
+2025-11-09T19:05:06.4390180Z Cache restored successfully
+2025-11-09T19:05:06.4557351Z Cache restored from key: pip-Linux-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
