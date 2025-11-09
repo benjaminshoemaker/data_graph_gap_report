@@ -1,0 +1,32 @@
+﻿2025-11-09T19:05:03.5423770Z ##[group]Run pre-commit run --all-files
+2025-11-09T19:05:03.5424030Z [36;1mpre-commit run --all-files[0m
+2025-11-09T19:05:03.5454050Z shell: /bin/bash -e {0}
+2025-11-09T19:05:03.5454320Z env:
+2025-11-09T19:05:03.5454530Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:05:03.5454740Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:05:03.5455040Z   PYTHONHASHSEED: 1337
+2025-11-09T19:05:03.5455190Z   TEST_RNG_SEED: 1337
+2025-11-09T19:05:03.5455360Z   JOB_START: 1762715091
+2025-11-09T19:05:03.5455570Z   LAST_TIME: 1762715103
+2025-11-09T19:05:03.5455800Z   pythonLocation: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:05:03.5456180Z   PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.11.9/arm64/lib/pkgconfig
+2025-11-09T19:05:03.5456680Z   Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:05:03.5457020Z   Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:05:03.5457400Z   Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:05:03.5457740Z ##[endgroup]
+2025-11-09T19:05:06.0367030Z black....................................................................Failed
+2025-11-09T19:05:06.0367910Z - hook id: black
+2025-11-09T19:05:06.0368380Z - files were modified by this hook
+2025-11-09T19:05:06.0368750Z 
+2025-11-09T19:05:06.0369020Z reformatted src/data_needs_reporter/report/run.py
+2025-11-09T19:05:06.0369450Z 
+2025-11-09T19:05:06.0370100Z All done! ✨ 🍰 ✨
+2025-11-09T19:05:06.0370550Z 1 file reformatted, 16 files left unchanged.
+2025-11-09T19:05:06.0371180Z All done! ✨ 🍰 ✨
+2025-11-09T19:05:06.0371580Z 17 files left unchanged.
+2025-11-09T19:05:06.0372050Z All done! ✨ 🍰 ✨
+2025-11-09T19:05:06.0372820Z 15 files left unchanged.
+2025-11-09T19:05:06.0372960Z 
+2025-11-09T19:05:06.6749480Z ruff.....................................................................Passed
+2025-11-09T19:05:07.3070900Z isort....................................................................Passed
+2025-11-09T19:05:07.3182870Z ##[error]Process completed with exit code 1.

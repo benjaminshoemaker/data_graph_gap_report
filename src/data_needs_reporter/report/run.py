@@ -1029,9 +1029,7 @@ def write_exec_summary(
                 continue
             metric_name = check.get("metric") or check.get("name")
             value_text = _format_invoice_value(metric_name, check.get("value"))
-            threshold_text = _format_invoice_value(
-                metric_name, check.get("threshold")
-            )
+            threshold_text = _format_invoice_value(metric_name, check.get("threshold"))
             symbol = "≥" if check.get("comparator") == "min" else "≤"
             data_health_bullets.append(
                 f"- Invoice: {metric_name} {value_text} (limit {threshold_text}, {symbol}) — FAIL"

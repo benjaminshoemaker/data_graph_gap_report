@@ -1,0 +1,45 @@
+﻿2025-11-09T19:04:52.6407601Z ##[group]Run actions/setup-python@v5
+2025-11-09T19:04:52.6408282Z with:
+2025-11-09T19:04:52.6408832Z   python-version: 3.11.9
+2025-11-09T19:04:52.6409414Z   check-latest: false
+2025-11-09T19:04:52.6410148Z   token: ***
+2025-11-09T19:04:52.6410660Z   update-environment: true
+2025-11-09T19:04:52.6411202Z   allow-prereleases: false
+2025-11-09T19:04:52.6411732Z   freethreaded: false
+2025-11-09T19:04:52.6412557Z env:
+2025-11-09T19:04:52.6413075Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:04:52.6413674Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:04:52.6414225Z   PYTHONHASHSEED: 1337
+2025-11-09T19:04:52.6414725Z   TEST_RNG_SEED: 1337
+2025-11-09T19:04:52.6415232Z   JOB_START: 1762715092
+2025-11-09T19:04:52.6415731Z   LAST_TIME: 1762715092
+2025-11-09T19:04:52.6416258Z ##[endgroup]
+2025-11-09T19:04:52.8105922Z ##[group]Installed versions
+2025-11-09T19:04:52.8125113Z Version 3.11.9 was not found in the local cache
+2025-11-09T19:04:53.1425297Z Version 3.11.9 is available for downloading
+2025-11-09T19:04:53.1427144Z Download from "https://github.com/actions/python-versions/releases/download/3.11.9-9947079978/python-3.11.9-linux-24.04-x64.tar.gz"
+2025-11-09T19:04:53.8255156Z Extract downloaded archive
+2025-11-09T19:04:53.8392150Z [command]/usr/bin/tar xz --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/08056f87-5357-46c6-ac8b-faeb12802f27 -f /home/runner/work/_temp/002fc132-6bf8-4ff5-927d-95b3eb9b5242
+2025-11-09T19:04:55.8902991Z Execute installation script
+2025-11-09T19:04:55.8995909Z Check if Python hostedtoolcache folder exist...
+2025-11-09T19:04:55.8996771Z Create Python 3.11.9 folder
+2025-11-09T19:04:55.9009584Z Copy Python binaries to hostedtoolcache folder
+2025-11-09T19:04:56.5103978Z Create additional symlinks (Required for the UsePythonVersion Azure Pipelines task and the setup-python GitHub Action)
+2025-11-09T19:04:56.5148410Z Upgrading pip...
+2025-11-09T19:04:59.0851121Z Looking in links: /tmp/tmpzugd2s8a
+2025-11-09T19:04:59.0860072Z Requirement already satisfied: setuptools in /opt/hostedtoolcache/Python/3.11.9/x64/lib/python3.11/site-packages (65.5.0)
+2025-11-09T19:04:59.0867980Z Requirement already satisfied: pip in /opt/hostedtoolcache/Python/3.11.9/x64/lib/python3.11/site-packages (24.0)
+2025-11-09T19:05:00.5220600Z Collecting pip
+2025-11-09T19:05:00.5608687Z Downloading pip-25.3-py3-none-any.whl.metadata (4.7 kB)
+2025-11-09T19:05:00.5697760Z Downloading pip-25.3-py3-none-any.whl (1.8 MB)
+2025-11-09T19:05:00.5969722Z ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 73.3 MB/s eta 0:00:00
+2025-11-09T19:05:00.5970506Z 
+2025-11-09T19:05:00.6392361Z Installing collected packages: pip
+2025-11-09T19:05:00.6393127Z Attempting uninstall: pip
+2025-11-09T19:05:00.6410485Z Found existing installation: pip 24.0
+2025-11-09T19:05:00.6796962Z Uninstalling pip-24.0:
+2025-11-09T19:05:00.6856050Z Successfully uninstalled pip-24.0
+2025-11-09T19:05:01.4935398Z Successfully installed pip-25.3
+2025-11-09T19:05:01.5528092Z Create complete file
+2025-11-09T19:05:01.5570720Z Successfully set up CPython (3.11.9)
+2025-11-09T19:05:01.5571821Z ##[endgroup]

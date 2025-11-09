@@ -1,0 +1,34 @@
+﻿2025-11-09T19:05:01.6409278Z ##[group]Run actions/cache@v4
+2025-11-09T19:05:01.6409578Z with:
+2025-11-09T19:05:01.6409791Z   path: .venv
+~/.cache/pypoetry
+
+2025-11-09T19:05:01.6410259Z   key: poetry-Linux-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
+2025-11-09T19:05:01.6410744Z   restore-keys: poetry-Linux-
+
+2025-11-09T19:05:01.6411018Z   enableCrossOsArchive: false
+2025-11-09T19:05:01.6411281Z   fail-on-cache-miss: false
+2025-11-09T19:05:01.6411518Z   lookup-only: false
+2025-11-09T19:05:01.6411742Z   save-always: false
+2025-11-09T19:05:01.6412207Z env:
+2025-11-09T19:05:01.6412432Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:05:01.6412745Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:05:01.6413019Z   PYTHONHASHSEED: 1337
+2025-11-09T19:05:01.6413238Z   TEST_RNG_SEED: 1337
+2025-11-09T19:05:01.6413455Z   JOB_START: 1762715092
+2025-11-09T19:05:01.6413669Z   LAST_TIME: 1762715101
+2025-11-09T19:05:01.6413959Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:01.6414407Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib/pkgconfig
+2025-11-09T19:05:01.6414884Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:01.6415279Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:01.6415664Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.9/x64
+2025-11-09T19:05:01.6416063Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.9/x64/lib
+2025-11-09T19:05:01.6416393Z ##[endgroup]
+2025-11-09T19:05:01.8467156Z Cache hit for: poetry-Linux-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
+2025-11-09T19:05:02.9198224Z Received 176160768 of 449235818 (39.2%), 167.0 MBs/sec
+2025-11-09T19:05:03.9181095Z Received 402653184 of 449235818 (89.6%), 191.4 MBs/sec
+2025-11-09T19:05:04.1690653Z Received 449235818 of 449235818 (100.0%), 189.5 MBs/sec
+2025-11-09T19:05:04.1694027Z Cache Size: ~428 MB (449235818 B)
+2025-11-09T19:05:04.1790727Z [command]/usr/bin/tar -xf /home/runner/work/_temp/a22511b9-12ac-450e-b992-c640e66e003c/cache.tzst -P -C /home/runner/work/data_graph_gap_report/data_graph_gap_report --use-compress-program unzstd
+2025-11-09T19:05:05.5832815Z Cache restored successfully
+2025-11-09T19:05:05.6808322Z Cache restored from key: poetry-Linux-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e

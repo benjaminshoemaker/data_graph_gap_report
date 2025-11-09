@@ -1,0 +1,20 @@
+﻿2025-11-09T19:05:07.3243510Z ##[group]Run now=$(date +%s)
+2025-11-09T19:05:07.3243780Z [36;1mnow=$(date +%s)[0m
+2025-11-09T19:05:07.3243960Z [36;1mtotal=$((now - JOB_START))[0m
+2025-11-09T19:05:07.3244200Z [36;1mprintf 'Total job duration: %ss\n' "$total"[0m
+2025-11-09T19:05:07.3244470Z [36;1mprintf '| Overall | %s |\n' "$total" >> "$GITHUB_STEP_SUMMARY"[0m
+2025-11-09T19:05:07.3278210Z shell: /bin/bash -e {0}
+2025-11-09T19:05:07.3278370Z env:
+2025-11-09T19:05:07.3278510Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:05:07.3278710Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:05:07.3278890Z   PYTHONHASHSEED: 1337
+2025-11-09T19:05:07.3279050Z   TEST_RNG_SEED: 1337
+2025-11-09T19:05:07.3279370Z   JOB_START: 1762715091
+2025-11-09T19:05:07.3279570Z   LAST_TIME: 1762715103
+2025-11-09T19:05:07.3279820Z   pythonLocation: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:05:07.3280260Z   PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.11.9/arm64/lib/pkgconfig
+2025-11-09T19:05:07.3280650Z   Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:05:07.3281010Z   Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:05:07.3281320Z   Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:05:07.3281610Z ##[endgroup]
+2025-11-09T19:05:07.3554990Z Total job duration: 16s

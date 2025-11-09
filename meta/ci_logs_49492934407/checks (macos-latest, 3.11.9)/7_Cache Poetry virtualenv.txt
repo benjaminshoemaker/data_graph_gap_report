@@ -1,0 +1,31 @@
+﻿2025-11-09T19:04:53.5487960Z ##[group]Run actions/cache@v4
+2025-11-09T19:04:53.5488320Z with:
+2025-11-09T19:04:53.5488540Z   path: .venv
+~/.cache/pypoetry
+
+2025-11-09T19:04:53.5488950Z   key: poetry-macOS-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
+2025-11-09T19:04:53.5489380Z   restore-keys: poetry-macOS-
+
+2025-11-09T19:04:53.5489630Z   enableCrossOsArchive: false
+2025-11-09T19:04:53.5489880Z   fail-on-cache-miss: false
+2025-11-09T19:04:53.5490100Z   lookup-only: false
+2025-11-09T19:04:53.5490340Z   save-always: false
+2025-11-09T19:04:53.5490550Z env:
+2025-11-09T19:04:53.5490750Z   POETRY_VIRTUALENVS_IN_PROJECT: true
+2025-11-09T19:04:53.5491010Z   POETRY_VIRTUALENVS_CREATE: false
+2025-11-09T19:04:53.5491240Z   PYTHONHASHSEED: 1337
+2025-11-09T19:04:53.5491470Z   TEST_RNG_SEED: 1337
+2025-11-09T19:04:53.5491680Z   JOB_START: 1762715091
+2025-11-09T19:04:53.5491880Z   LAST_TIME: 1762715093
+2025-11-09T19:04:53.5492170Z   pythonLocation: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:04:53.5492610Z   PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.11.9/arm64/lib/pkgconfig
+2025-11-09T19:04:53.5493090Z   Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:04:53.5493480Z   Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:04:53.5493880Z   Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.11.9/arm64
+2025-11-09T19:04:53.5494220Z ##[endgroup]
+2025-11-09T19:04:53.8257940Z Cache hit for: poetry-macOS-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
+2025-11-09T19:04:54.7116900Z Received 112265690 of 112265690 (100.0%), 129.9 MBs/sec
+2025-11-09T19:04:54.7125560Z Cache Size: ~107 MB (112265690 B)
+2025-11-09T19:04:54.7453530Z [command]/opt/homebrew/bin/gtar -xf /Users/runner/work/_temp/0d2b479d-073b-44cd-b5b8-1cf9b590f4e2/cache.tzst -P -C /Users/runner/work/data_graph_gap_report/data_graph_gap_report --delay-directory-restore --use-compress-program unzstd
+2025-11-09T19:04:56.3933610Z Cache restored successfully
+2025-11-09T19:04:56.4229160Z Cache restored from key: poetry-macOS-8b1d9ca9b375a7e6143c1e355f2ecaf8b38362a5ce9b79007e8849d114ae242e
