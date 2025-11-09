@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from data_needs_reporter.report.metrics import validate_monetization_targets
+from data_needs_reporter.report.run import _compute_table_revenue_scores
 
 pytest.importorskip("polars")
 import polars as pl  # noqa: E402
@@ -89,3 +90,29 @@ def test_tier_attach_targets_fail(tmp_path: Path) -> None:
     result = validate_monetization_targets(warehouse, attach_targets={"Tier B": 0.10})
     assert result["passed"] is False
     assert any("Tier B" in issue for issue in result["issues"])
+
+
+def test_tier_attach_targets_adjust_revenue_score(tmp_path: Path) -> None:
+    warehouse = tmp_path / "tiers_revenue"
+    _write_neobank_with_tiers(
+        warehouse,
+        tier_customers={"Tier A": [1, 2], "Tier B": [3]},
+    )
+    invoice_path = warehouse / "fact_subscription_invoice.parquet"
+    feb = datetime(2024, 2, 1)
+    invoices = pl.read_parquet(invoice_path)
+    feb_lit = pl.lit(feb, dtype=pl.Datetime("us"))
+    invoices = invoices.with_columns(
+        pl.when(pl.col("tier") == "Tier B")
+        .then(feb_lit)
+        .otherwise(pl.col("paid_at"))
+        .alias("paid_at")
+    )
+    invoices.write_parquet(invoice_path)
+
+    baseline = _compute_table_revenue_scores(warehouse)
+    targeted = _compute_table_revenue_scores(
+        warehouse, attach_targets={"Tier A": 0.04, "Tier B": 0.02}
+    )
+    assert targeted["fact_subscription_invoice"] > baseline["fact_subscription_invoice"]
+    assert targeted["fact_subscription_invoice"] >= targeted["fact_card_transaction"]

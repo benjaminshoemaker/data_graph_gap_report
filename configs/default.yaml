@@ -81,7 +81,11 @@
       }
     },
     "monetization": {
-      "attach_targets": {}
+      "attach_targets": {
+        "Tier A": 0.05,
+        "Tier B": 0.03,
+        "Tier C": 0.01
+      }
     }
   },
   "budget": {
