@@ -254,6 +254,9 @@ Exec 3%, data_eng 12%, analytics_eng 8%, bi 7%, product_analytics 5%, eng_platfo
 * Key-null %, FK success %, Orphan %, Duplicate %, p95 ingest lag, null spikes detection.
 * Temporal join rule: `fact_ts >= dim.created_at` when present.
 * Outputs per table and overall SLO compliance. Daily series drive figures.
+* MVP-complete guardrails:
+  - Invoice aggregates (neobank): compute `missing_pct`, `on_time_pct`, `dup_key_pct`, `p95_payment_lag_min` from `fact_subscription_invoice`. Thresholds via `report.invoice_aggregates.slos` (max/min per metric). Results surfaced in `data_health.json` under `aggregates_by_table.fact_subscription_invoice` and in `invoice_aggregates{metrics,checks,passed}`.
+  - Evening window (marketplace): compute evening share and qualifying-day %, with thresholds from `report.marketplace.evening_window{min_share_pct,min_days_pct}`. Results surfaced in `data_health.json` under `marketplace_evening_window{daily_share_pct,overall_share_pct,days_pct,checks,passed}`.
 
 ### SLOs (config)
 
@@ -284,6 +287,10 @@ Exec 3%, data_eng 12%, analytics_eng 8%, bi 7%, product_analytics 5%, eng_platfo
 * `reports/{arch}/themes.{json,md}`
 * `reports/{arch}/figures/*.png`
 * `reports/index.md` (from `quickstart`)
+* Guardrail additions (MVP complete):
+  - `data_health.json` includes `aggregates_by_table.fact_subscription_invoice` and `invoice_aggregates` (when enabled or thresholds configured).
+  - `data_health.json` includes `marketplace_evening_window` with thresholds and `checks` when marketplace payments exist.
+  - `exec_summary.md` includes a “Data Health” section with any failing guardrails, plus detailed “Invoice Aggregates” and “Marketplace Evening Coverage” summaries.
 
 ### Schemas
 
@@ -312,6 +319,9 @@ Use the approved `exec_summary.json`, `data_health.json`, `themes.json`, plus lo
 * Correlation hooks near injected events.
 * Reproducibility with same seeds.
 * LLM spend ≤ caps.
+* MVP-complete guardrails:
+  - Invoice aggregate SLOs (missing, on-time, dup keys, p95 payment lag) evaluated against configured thresholds.
+  - Marketplace evening window guardrails (overall evening share ≥ min_share_pct; qualifying days ≥ min_days_pct).
 
 ## Error Handling and Exit Codes
 
@@ -384,6 +394,7 @@ cache: {enabled: true, dir: ".cache/llm"}
 * End-to-end: `quickstart --no-llm` should produce `data_health` and “themes skipped”.
 * With LLM: seeded run respecting caps; verify `budget.json`, coverage floors, and cached calls.
 * Validation: `validate --strict` on fresh outputs passes with Typical profile.
+* MVP-complete: invoice aggregates SLOs and marketplace evening-window guardrails reported and validated.
 
 ### Golden files
 

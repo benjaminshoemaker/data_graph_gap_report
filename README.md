@@ -109,6 +109,113 @@ Options:
   --help            Show this message and exit.
 ```
 
+## Reports & Guardrails
+
+`run-report` produces `data_health.{json,csv}`, `exec_summary.{json,md}`, `themes.{json,md}`, and figures under `reports/{arch}`. In addition to per‑table quality metrics, the tool now exposes two guardrail families:
+
+- Invoice aggregates SLOs (neobank):
+  - Metrics computed from `fact_subscription_invoice`: `missing_pct`, `on_time_pct`, `dup_key_pct`, `p95_payment_lag_min`.
+  - Configure thresholds via `report.invoice_aggregates.slos`:
+    - `max_missing_pct`, `min_on_time_pct`, `max_dup_key_pct`, `max_p95_payment_lag_min`.
+  - Outputs:
+    - `data_health.json` includes `aggregates_by_table.fact_subscription_invoice` metrics, and an `invoice_aggregates` block with `metrics` and, when thresholds are present, `checks` and overall `passed`.
+    - `exec_summary.md` appends a “Data Health” section listing only failing checks and a detailed “Invoice Aggregates” section.
+
+- Marketplace evening-window guardrails (marketplace):
+  - Measures share of payment events captured in a local‑time evening window and qualifying days within the report window.
+  - Configure via `report.marketplace.evening_window`: `start_hour`, `end_hour`, `min_share_pct`, `min_days_pct`.
+  - Outputs:
+    - `data_health.json` includes `marketplace_evening_window` with daily shares, `overall_share_pct`, `days_pct`, thresholds, `checks`, and overall `passed`.
+    - `exec_summary.md` includes “Marketplace Evening Coverage” with values and limits, and adds failing bullets to “Data Health”.
+
+Example snippets
+
+`reports/neobank/data_health.json` (excerpt):
+
+```json
+{
+  "aggregates_by_table": {
+    "fact_subscription_invoice": {
+      "missing_pct": 0.0,
+      "on_time_pct": 100.0,
+      "dup_key_pct": 0.0,
+      "p95_payment_lag_min": 0.0
+    }
+  },
+  "invoice_aggregates": {
+    "enabled": true,
+    "metrics": { "missing_pct": 0.0, "on_time_pct": 100.0 },
+    "checks": [
+      {
+        "name": "min_on_time_pct",
+        "metric": "on_time_pct",
+        "comparator": "min",
+        "threshold": 90.0,
+        "value": 88.0,
+        "passed": false
+      }
+    ],
+    "passed": false
+  }
+}
+```
+
+`reports/marketplace/data_health.json` (excerpt):
+
+```json
+{
+  "marketplace_evening_window": {
+    "overall_share_pct": 24.3,
+    "days_pct": 83.3,
+    "threshold_share_pct": 20.0,
+    "threshold_days_pct": 80.0,
+    "start_hour": 17,
+    "end_hour": 21,
+    "window_days": 30,
+    "checks": [
+      {"name": "slo.marketplace_evening.overall_share_pct", "passed": true},
+      {"name": "slo.marketplace_evening.days_pct", "passed": true}
+    ],
+    "passed": true
+  }
+}
+```
+
+`reports/{arch}/exec_summary.md` (excerpt):
+
+```
+## Data Health
+- Invoice: on_time_pct 88.00% (limit 90.00%, ≥) — FAIL
+
+## Invoice Aggregates
+- on_time_pct: 88.00% (limit 90.00%, ≥) — FAIL
+
+## Marketplace Evening Coverage
+- Overall Share: 24.30% (limit 20.00%, ≥)
+- Qualifying Days: 83.33% (limit 80.00%, ≥)
+```
+
+### Configuration knobs
+
+Add these under the `report:` section of your YAML:
+
+```yaml
+report:
+  marketplace:
+    evening_window:
+      start_hour: 17
+      end_hour: 21
+      min_share_pct: 20.0
+      min_days_pct: 80.0
+  invoice_aggregates:
+    enabled: true
+    slos:
+      max_missing_pct: 5.0
+      min_on_time_pct: 90.0
+      max_dup_key_pct: 1.0
+      max_p95_payment_lag_min: 240.0
+```
+
 ### `dnr eval-labels`
 
 ```
